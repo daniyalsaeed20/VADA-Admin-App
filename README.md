@@ -1,17 +1,30 @@
-# vada_admin_app
+# VADA Admin (Web)
 
-A new Flutter project.
+Milestone 1 foundation for a web-only admin panel with:
 
-## Getting Started
+- Admin login (Firebase Auth)
+- Admin-only protected routes (`/dashboard`, `/fighters`)
+- Fighter account management (create, edit, enable/disable)
+- Fighter profile fields (name, birth date, gender, phone, email, address, primary contact)
+- Firestore base collections bootstrap (`contacts`, `locations`, `schedules`, `checkins`, `notifications`)
+- Localization foundation (English, Japanese, Russian, Spanish)
 
-This project is a starting point for a Flutter application.
+## Setup
 
-A few resources to get you started if this is your first Flutter project:
+1. Install dependencies:
+   - `flutter pub get`
+2. Run for web:
+   - `flutter run -d chrome`
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Firebase Requirements
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Configure one admin user in Auth.
+2. In Firestore, create `/users/{adminUid}`:
+   - `role: "admin"`
+3. Deploy security rules/indexes:
+   - `firebase deploy --only firestore`
+
+## Notes
+
+- Fighter creation uses a secondary Firebase app instance to create email/password credentials without replacing the currently signed-in admin session.
+- Access disable/enable is persisted as `disabled` in `users` documents (`role: "fighter"`).

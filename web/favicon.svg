@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VADA">
+  <rect width="64" height="64" rx="12" fill="#1F1F1F"/>
+  <path d="M15 48L23 16H29L21 48H15Z" fill="#9A9A9A"/>
+  <path d="M27 48L35 16H41L33 48H27Z" fill="#B50000"/>
+  <path d="M39 48L47 16H53L45 48H39Z" fill="#9A9A9A"/>
+  <rect x="13" y="49" width="38" height="3" rx="1.5" fill="#B50000"/>
+</svg>
