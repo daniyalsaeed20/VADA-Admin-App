@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/localization/localization_x.dart';
-import '../../../core/theme/brand_theme.dart';
 import 'auth_controller.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -62,7 +61,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(height: 20),
                       TextFormField(
                         controller: _emailController,
-                        decoration: InputDecoration(labelText: loc.tr('auth.email')),
+                        decoration:
+                            InputDecoration(labelText: loc.tr('auth.email')),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return loc.tr('fighters.required');
@@ -135,28 +135,12 @@ class _LoginBrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        Text(
-          'VADA',
-          style: TextStyle(
-            color: BrandTheme.vadaRed,
-            fontSize: 34,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.2,
-            height: 1,
-          ),
-        ),
-        SizedBox(height: 4),
-        Text(
-          'Voluntary Anti-Doping Association',
-          style: TextStyle(
-            color: BrandTheme.vadaCharcoal,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-      ],
+    return const SizedBox(
+      height: 68,
+      child: Image(
+        image: AssetImage('assets/vada_logo.png'),
+        fit: BoxFit.contain,
+      ),
     );
   }
 }

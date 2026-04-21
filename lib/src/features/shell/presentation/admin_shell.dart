@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/localization/locale_controller.dart';
 import '../../../core/localization/localization_x.dart';
-import '../../../core/theme/brand_theme.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../bootstrap/bootstrap_service.dart';
 
@@ -209,29 +208,12 @@ class _RailBrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          'VADA',
-          style: TextStyle(
-            color: BrandTheme.vadaRed,
-            fontWeight: FontWeight.w900,
-            fontSize: 24,
-            letterSpacing: 0.8,
-            height: 1,
-          ),
-        ),
-        if (!isCompact) const SizedBox(height: 2),
-        if (!isCompact)
-          const Text(
-            'Admin',
-            style: TextStyle(
-              color: BrandTheme.vadaCharcoal,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-      ],
+    return SizedBox(
+      height: isCompact ? 30 : 46,
+      child: const Image(
+        image: AssetImage('assets/vada_logo.png'),
+        fit: BoxFit.contain,
+      ),
     );
   }
 }
