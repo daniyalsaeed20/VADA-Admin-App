@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
 import '../data/fighters_repository.dart';
@@ -33,9 +34,8 @@ class FighterMutationState {
     return FighterMutationState(
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      successMessage: clearSuccess
-          ? null
-          : (successMessage ?? this.successMessage),
+      successMessage:
+          clearSuccess ? null : (successMessage ?? this.successMessage),
     );
   }
 }
@@ -43,6 +43,7 @@ class FighterMutationState {
 class FighterMutationController extends StateNotifier<FighterMutationState> {
   FighterMutationController(this._ref) : super(const FighterMutationState());
 
+  static final DateFormat _dobFormat = DateFormat('yyyy-MM-dd');
   final Ref _ref;
 
   Future<void> create({
@@ -56,7 +57,17 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
     required String password,
     required bool disabled,
   }) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    final dobError = _validateDateOfBirth(dateOfBirth);
+    if (dobError != null) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: dobError,
+        clearSuccess: true,
+      );
+      return;
+    }
+    state =
+        state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
       await _ref.read(fightersRepositoryProvider).createFighter(
             fullName: fullName,
@@ -92,7 +103,17 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
     required String primaryContactPerson,
     required bool disabled,
   }) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    final dobError = _validateDateOfBirth(dateOfBirth);
+    if (dobError != null) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: dobError,
+        clearSuccess: true,
+      );
+      return;
+    }
+    state =
+        state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
       await _ref.read(fightersRepositoryProvider).updateFighter(
             uid: uid,
@@ -121,7 +142,8 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
     required String uid,
     required bool disabled,
   }) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    state =
+        state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
       await _ref.read(fightersRepositoryProvider).setFighterAccess(
             uid: uid,
@@ -139,9 +161,24 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
   void clearMessages() {
     state = state.copyWith(clearError: true, clearSuccess: true);
   }
+
+  String? _validateDateOfBirth(String rawDateOfBirth) {
+    try {
+      final parsed = _dobFormat.parseStrict(rawDateOfBirth.trim());
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (parsed.isAfter(today)) {
+        return 'fighters.futureDob';
+      }
+    } catch (_) {
+      // Let the form-level validator handle format errors.
+    }
+    return null;
+  }
 }
 
 final fighterMutationControllerProvider =
-    StateNotifierProvider<FighterMutationController, FighterMutationState>((ref) {
-      return FighterMutationController(ref);
-    });
+    StateNotifierProvider<FighterMutationController, FighterMutationState>(
+        (ref) {
+  return FighterMutationController(ref);
+});

@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import '../../../core/constants/app_roles.dart';
+import '../../../core/constants/firestore_collections.dart';
 import '../../../../firebase_options.dart';
 import '../domain/fighter.dart';
 
@@ -11,34 +13,33 @@ class FightersRepository {
   final FirebaseFirestore _firestore;
 
   CollectionReference<Map<String, dynamic>> get _users =>
-      _firestore.collection('users');
+      _firestore.collection(FirestoreCollections.users);
 
   Stream<List<Fighter>> watchFighters() {
     return _users
-        .where('role', isEqualTo: 'fighter')
+        .where('role', isEqualTo: AppRoles.fighter)
         .snapshots()
         .map((snapshot) {
-          final fighters = snapshot.docs
-              .map((doc) => Fighter.fromFirestore(doc))
-              .toList();
+      final fighters =
+          snapshot.docs.map((doc) => Fighter.fromFirestore(doc)).toList();
 
-          // Keep ordering stable in UI without requiring a composite index.
-          fighters.sort((a, b) {
-            final aDate = a.updatedAt ?? a.createdAt;
-            final bDate = b.updatedAt ?? b.createdAt;
-            if (aDate == null && bDate == null) {
-              return 0;
-            }
-            if (aDate == null) {
-              return 1;
-            }
-            if (bDate == null) {
-              return -1;
-            }
-            return bDate.compareTo(aDate);
-          });
-          return fighters;
-        });
+      // Keep ordering stable in UI without requiring a composite index.
+      fighters.sort((a, b) {
+        final aDate = a.updatedAt ?? a.createdAt;
+        final bDate = b.updatedAt ?? b.createdAt;
+        if (aDate == null && bDate == null) {
+          return 0;
+        }
+        if (aDate == null) {
+          return 1;
+        }
+        if (bDate == null) {
+          return -1;
+        }
+        return bDate.compareTo(aDate);
+      });
+      return fighters;
+    });
   }
 
   Future<void> createFighter({
@@ -70,7 +71,7 @@ class FightersRepository {
       final uid = credential.user!.uid;
 
       await _users.doc(uid).set({
-        'role': 'fighter',
+        'role': AppRoles.fighter,
         'fullName': fullName.trim(),
         'dateOfBirth': dateOfBirth.trim(),
         'gender': gender.trim(),

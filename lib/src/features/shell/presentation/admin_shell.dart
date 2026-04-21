@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/localization/locale_controller.dart';
 import '../../../core/localization/localization_x.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../bootstrap/bootstrap_service.dart';
 
@@ -21,55 +24,55 @@ class AdminShell extends ConsumerWidget {
     final loc = context.l10n;
     final navItems = [
       _NavItem(
-        route: '/dashboard',
+        route: AppRoutes.dashboard,
         icon: Icons.dashboard_outlined,
         selectedIcon: Icons.dashboard,
         label: loc.tr('nav.dashboard'),
       ),
       _NavItem(
-        route: '/fighters',
+        route: AppRoutes.fighters,
         icon: Icons.sports_mma_outlined,
         selectedIcon: Icons.sports_mma,
         label: loc.tr('nav.fighters'),
       ),
       _NavItem(
-        route: '/contacts',
+        route: AppRoutes.contacts,
         icon: Icons.contact_phone_outlined,
         selectedIcon: Icons.contact_phone,
         label: loc.tr('nav.contacts'),
       ),
       _NavItem(
-        route: '/locations',
+        route: AppRoutes.locations,
         icon: Icons.location_on_outlined,
         selectedIcon: Icons.location_on,
         label: loc.tr('nav.locations'),
       ),
       _NavItem(
-        route: '/whereabouts',
+        route: AppRoutes.whereabouts,
         icon: Icons.calendar_month_outlined,
         selectedIcon: Icons.calendar_month,
         label: loc.tr('nav.whereabouts'),
       ),
       _NavItem(
-        route: '/checkins',
+        route: AppRoutes.checkins,
         icon: Icons.gps_fixed_outlined,
         selectedIcon: Icons.gps_fixed,
         label: loc.tr('nav.checkins'),
       ),
       _NavItem(
-        route: '/notifications',
+        route: AppRoutes.notifications,
         icon: Icons.notifications_outlined,
         selectedIcon: Icons.notifications,
         label: loc.tr('nav.notifications'),
       ),
       _NavItem(
-        route: '/reports',
+        route: AppRoutes.reports,
         icon: Icons.assessment_outlined,
         selectedIcon: Icons.assessment,
         label: loc.tr('nav.reports'),
       ),
       _NavItem(
-        route: '/settings',
+        route: AppRoutes.settings,
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
         label: loc.tr('nav.settings'),
@@ -99,7 +102,7 @@ class AdminShell extends ConsumerWidget {
               onPressed: () async {
                 await ref.read(authRepositoryProvider).logout();
                 if (context.mounted) {
-                  context.go('/login');
+                  context.go(AppRoutes.login);
                 }
               },
               icon: const Icon(Icons.logout),
@@ -208,10 +211,13 @@ class _RailBrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final logoHeight = isCompact
+        ? AppLayout.largeGap(context) * 1.5
+        : AppLayout.largeGap(context) * 2.3;
     return SizedBox(
-      height: isCompact ? 30 : 46,
+      height: logoHeight,
       child: const Image(
-        image: AssetImage('assets/vada_logo.png'),
+        image: AssetImage(AppAssets.vadaLogo),
         fit: BoxFit.contain,
       ),
     );
@@ -246,7 +252,7 @@ class _RailTrailingControls extends ConsumerWidget {
             onPressed: () async {
               await ref.read(authRepositoryProvider).logout();
               if (context.mounted) {
-                context.go('/login');
+                context.go(AppRoutes.login);
               }
             },
             icon: const Icon(Icons.logout),
@@ -257,9 +263,9 @@ class _RailTrailingControls extends ConsumerWidget {
     }
 
     return SizedBox(
-      width: 178,
+      width: AppLayout.kpiCardWidth(context) * 0.78,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppLayout.mediumGap(context)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -285,12 +291,12 @@ class _RailTrailingControls extends ConsumerWidget {
                 }
               },
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppLayout.mediumGap(context)),
             FilledButton.icon(
               onPressed: () async {
                 await ref.read(authRepositoryProvider).logout();
                 if (context.mounted) {
-                  context.go('/login');
+                  context.go(AppRoutes.login);
                 }
               },
               icon: const Icon(Icons.logout),

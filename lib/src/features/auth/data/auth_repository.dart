@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/constants/app_roles.dart';
+import '../../../core/constants/firestore_collections.dart';
+
 class AuthRepository {
   AuthRepository(this._auth, this._firestore);
 
@@ -33,9 +36,10 @@ class AuthRepository {
       return _cachedIsAdmin!;
     }
 
-    final snapshot = await _firestore.collection('users').doc(uid).get();
+    final snapshot =
+        await _firestore.collection(FirestoreCollections.users).doc(uid).get();
     final role = snapshot.data()?['role'];
-    final isAdmin = role == 'admin';
+    final isAdmin = role == AppRoles.admin;
     _cachedAdminUid = uid;
     _cachedIsAdmin = isAdmin;
     _cachedAdminCheckedAt = DateTime.now();

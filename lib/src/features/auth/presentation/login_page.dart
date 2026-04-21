@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/localization_x.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import 'auth_controller.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -35,16 +39,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFF6F6F6), Color(0xFFECECEC)],
+            colors: [AppColors.loginGradientStart, AppColors.loginGradientEnd],
           ),
         ),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
-              margin: const EdgeInsets.all(16),
+              margin: EdgeInsets.all(AppLayout.cardPadding(context)),
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(AppLayout.largeGap(context)),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -52,13 +56,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const _LoginBrandHeader(),
-                      const SizedBox(height: 16),
+                      SizedBox(height: AppLayout.mediumGap(context)),
                       Text(
                         loc.tr('auth.loginTitle'),
                         style: Theme.of(context).textTheme.headlineSmall,
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: AppLayout.largeGap(context)),
                       TextFormField(
                         controller: _emailController,
                         decoration:
@@ -70,7 +74,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppLayout.mediumGap(context)),
                       TextFormField(
                         controller: _passwordController,
                         obscureText: true,
@@ -85,7 +89,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         },
                       ),
                       if (loginState.errorMessage != null) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: AppLayout.mediumGap(context)),
                         Text(
                           loc.tr(loginState.errorMessage!),
                           style: TextStyle(
@@ -94,7 +98,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           textAlign: TextAlign.center,
                         ),
                       ],
-                      const SizedBox(height: 16),
+                      SizedBox(height: AppLayout.mediumGap(context)),
                       FilledButton(
                         onPressed: loginState.isLoading
                             ? null
@@ -109,7 +113,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       password: _passwordController.text,
                                     );
                                 if (success && context.mounted) {
-                                  context.go('/dashboard');
+                                  context.go(AppRoutes.dashboard);
                                 }
                               },
                         child: Text(
@@ -135,10 +139,10 @@ class _LoginBrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      height: 68,
-      child: Image(
-        image: AssetImage('assets/vada_logo.png'),
+    return SizedBox(
+      height: AppLayout.largeGap(context) * 3.2,
+      child: const Image(
+        image: AssetImage(AppAssets.vadaLogo),
         fit: BoxFit.contain,
       ),
     );

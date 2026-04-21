@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'app_colors.dart';
+
 class BrandTheme {
-  static const Color vadaRed = Color(0xFFB50000);
-  static const Color vadaRedDark = Color(0xFF7D0000);
-  static const Color vadaCharcoal = Color(0xFF1F1F1F);
-  static const Color vadaSteel = Color(0xFF767676);
-  static const Color vadaCanvas = Color(0xFFF5F5F5);
+  static const Color vadaRed = AppColors.red;
+  static const Color vadaRedDark = AppColors.redDark;
+  static const Color vadaCharcoal = AppColors.charcoal;
+  static const Color vadaSteel = AppColors.steel;
+  static const Color vadaCanvas = AppColors.canvas;
 
   static ThemeData lightTheme() {
     const colorScheme = ColorScheme(
@@ -14,7 +16,7 @@ class BrandTheme {
       onPrimary: Colors.white,
       secondary: vadaCharcoal,
       onSecondary: Colors.white,
-      error: Color(0xFFBA1A1A),
+      error: AppColors.error,
       onError: Colors.white,
       surface: Colors.white,
       onSurface: vadaCharcoal,
@@ -38,11 +40,11 @@ class BrandTheme {
         fillColor: Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD7D7D7)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD7D7D7)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -69,7 +71,7 @@ class BrandTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        side: const BorderSide(color: Color(0xFFDDDDDD)),
+        side: const BorderSide(color: AppColors.chipBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       textTheme: const TextTheme(

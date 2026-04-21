@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../constants/app_routes.dart';
 import '../firebase/firebase_providers.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -17,11 +18,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refreshStream.dispose);
 
   return GoRouter(
-    initialLocation: '/dashboard',
+    initialLocation: AppRoutes.dashboard,
     refreshListenable: refreshStream,
     routes: [
       GoRoute(
-        path: '/login',
+        path: AppRoutes.login,
         pageBuilder: (context, state) =>
             _noTransitionPage(state: state, child: const LoginPage()),
       ),
@@ -29,59 +30,59 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AdminShell(child: child),
         routes: [
           GoRoute(
-            path: '/dashboard',
+            path: AppRoutes.dashboard,
             pageBuilder: (context, state) =>
                 _noTransitionPage(state: state, child: const DashboardPage()),
           ),
           GoRoute(
-            path: '/fighters',
+            path: AppRoutes.fighters,
             pageBuilder: (context, state) =>
                 _noTransitionPage(state: state, child: const FightersPage()),
           ),
           GoRoute(
-            path: '/contacts',
+            path: AppRoutes.contacts,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.contacts'),
             ),
           ),
           GoRoute(
-            path: '/locations',
+            path: AppRoutes.locations,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.locations'),
             ),
           ),
           GoRoute(
-            path: '/whereabouts',
+            path: AppRoutes.whereabouts,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.whereabouts'),
             ),
           ),
           GoRoute(
-            path: '/checkins',
+            path: AppRoutes.checkins,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.checkins'),
             ),
           ),
           GoRoute(
-            path: '/notifications',
+            path: AppRoutes.notifications,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.notifications'),
             ),
           ),
           GoRoute(
-            path: '/reports',
+            path: AppRoutes.reports,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.reports'),
             ),
           ),
           GoRoute(
-            path: '/settings',
+            path: AppRoutes.settings,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
               child: const ComingSoonPage(titleKey: 'nav.settings'),
@@ -93,20 +94,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) async {
       final auth = ref.read(firebaseAuthProvider);
       final user = auth.currentUser;
-      final onLoginPage = state.matchedLocation == '/login';
+      final onLoginPage = state.matchedLocation == AppRoutes.login;
 
       if (user == null) {
-        return onLoginPage ? null : '/login';
+        return onLoginPage ? null : AppRoutes.login;
       }
 
       final isAdmin = await authRepo.isAdmin(user.uid);
       if (!isAdmin) {
         await authRepo.logout();
-        return '/login';
+        return AppRoutes.login;
       }
 
       if (onLoginPage) {
-        return '/dashboard';
+        return AppRoutes.dashboard;
       }
       return null;
     },
