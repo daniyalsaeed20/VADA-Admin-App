@@ -28,10 +28,18 @@ class AppLocalizations {
       'auth.loginFailed': 'Login failed. Please check credentials.',
       'nav.dashboard': 'Dashboard',
       'nav.fighters': 'Fighters',
+      'nav.contacts': 'Contacts',
+      'nav.locations': 'Locations',
+      'nav.whereabouts': 'Whereabouts',
+      'nav.checkins': 'Check-ins',
+      'nav.notifications': 'Notifications',
+      'nav.reports': 'Reports',
+      'nav.settings': 'Settings',
       'nav.language': 'Language',
       'dashboard.title': 'Admin Dashboard',
       'dashboard.subtitle': 'Manage fighters and platform data.',
       'dashboard.quickStats': 'Quick Stats',
+      'dashboard.dataOverviewTitle': 'Data Overview',
       'dashboard.totalFighters': 'Total fighters',
       'dashboard.activeFighters': 'Active fighters',
       'dashboard.disabledFighters': 'Disabled fighters',
@@ -73,8 +81,23 @@ class AppLocalizations {
       'fighters.password': 'Temporary Password',
       'fighters.required': 'Please fill all required fields.',
       'fighters.unknownError': 'An unexpected error occurred.',
+      'common.comingSoon': 'Coming soon',
       'common.retry': 'Retry',
       'common.loading': 'Loading...',
+      'comingSoon.contacts':
+          'Contacts management is part of a later milestone and will be available soon.',
+      'comingSoon.locations':
+          'Locations management is part of a later milestone and will be available soon.',
+      'comingSoon.whereabouts':
+          'Whereabouts monitoring is part of a later milestone and will be available soon.',
+      'comingSoon.checkins':
+          'Check-in monitoring is part of a later milestone and will be available soon.',
+      'comingSoon.notifications':
+          'Notification monitoring is part of a later milestone and will be available soon.',
+      'comingSoon.reports':
+          'Reports are part of a later milestone and will be available soon.',
+      'comingSoon.settings':
+          'Settings is part of a later milestone and will be available soon.',
     },
     'ja': {
       'app.title': 'VADA 管理',
@@ -89,15 +112,22 @@ class AppLocalizations {
       'auth.loginFailed': 'ログインに失敗しました。認証情報を確認してください。',
       'nav.dashboard': 'ダッシュボード',
       'nav.fighters': '選手',
+      'nav.contacts': '連絡先',
+      'nav.locations': 'ロケーション',
+      'nav.whereabouts': '所在情報',
+      'nav.checkins': 'チェックイン',
+      'nav.notifications': '通知',
+      'nav.reports': 'レポート',
+      'nav.settings': '設定',
       'nav.language': '言語',
       'dashboard.title': '管理ダッシュボード',
       'dashboard.subtitle': '選手とプラットフォームデータを管理します。',
       'dashboard.quickStats': '概要',
+      'dashboard.dataOverviewTitle': 'データ概要',
       'dashboard.totalFighters': '選手数',
       'dashboard.activeFighters': '有効な選手',
       'dashboard.disabledFighters': '無効な選手',
-      'dashboard.manageFightersHint':
-          '選手管理でアカウント作成とアクセス制御を行えます。',
+      'dashboard.manageFightersHint': '選手管理でアカウント作成とアクセス制御を行えます。',
       'dashboard.goToFighters': '選手管理へ',
       'dashboard.recentFighters': '最近更新された選手',
       'dashboard.noRecentFighters': '選手アクティビティはまだありません。',
@@ -134,8 +164,16 @@ class AppLocalizations {
       'fighters.password': '仮パスワード',
       'fighters.required': '必須項目を入力してください。',
       'fighters.unknownError': '予期しないエラーが発生しました。',
+      'common.comingSoon': '近日公開',
       'common.retry': '再試行',
       'common.loading': '読み込み中...',
+      'comingSoon.contacts': '連絡先管理は後続マイルストーンで提供予定です。',
+      'comingSoon.locations': 'ロケーション管理は後続マイルストーンで提供予定です。',
+      'comingSoon.whereabouts': '所在情報監視は後続マイルストーンで提供予定です。',
+      'comingSoon.checkins': 'チェックイン監視は後続マイルストーンで提供予定です。',
+      'comingSoon.notifications': '通知監視は後続マイルストーンで提供予定です。',
+      'comingSoon.reports': 'レポートは後続マイルストーンで提供予定です。',
+      'comingSoon.settings': '設定は後続マイルストーンで提供予定です。',
     },
     'ru': {
       'app.title': 'VADA Админ',
@@ -150,10 +188,18 @@ class AppLocalizations {
       'auth.loginFailed': 'Не удалось войти. Проверьте данные.',
       'nav.dashboard': 'Панель',
       'nav.fighters': 'Бойцы',
+      'nav.contacts': 'Контакты',
+      'nav.locations': 'Локации',
+      'nav.whereabouts': 'Местонахождение',
+      'nav.checkins': 'Чекины',
+      'nav.notifications': 'Уведомления',
+      'nav.reports': 'Отчеты',
+      'nav.settings': 'Настройки',
       'nav.language': 'Язык',
       'dashboard.title': 'Панель администратора',
       'dashboard.subtitle': 'Управляйте бойцами и данными платформы.',
       'dashboard.quickStats': 'Статистика',
+      'dashboard.dataOverviewTitle': 'Обзор данных',
       'dashboard.totalFighters': 'Всего бойцов',
       'dashboard.activeFighters': 'Активные бойцы',
       'dashboard.disabledFighters': 'Отключенные бойцы',
@@ -195,8 +241,23 @@ class AppLocalizations {
       'fighters.password': 'Временный пароль',
       'fighters.required': 'Заполните все обязательные поля.',
       'fighters.unknownError': 'Произошла непредвиденная ошибка.',
+      'common.comingSoon': 'Скоро',
       'common.retry': 'Повторить',
       'common.loading': 'Загрузка...',
+      'comingSoon.contacts':
+          'Управление контактами относится к следующему этапу и скоро появится.',
+      'comingSoon.locations':
+          'Управление локациями относится к следующему этапу и скоро появится.',
+      'comingSoon.whereabouts':
+          'Мониторинг местонахождения относится к следующему этапу и скоро появится.',
+      'comingSoon.checkins':
+          'Мониторинг чекинов относится к следующему этапу и скоро появится.',
+      'comingSoon.notifications':
+          'Мониторинг уведомлений относится к следующему этапу и скоро появится.',
+      'comingSoon.reports':
+          'Отчеты относятся к следующему этапу и скоро появятся.',
+      'comingSoon.settings':
+          'Настройки относятся к следующему этапу и скоро появятся.',
     },
     'es': {
       'app.title': 'VADA Admin',
@@ -211,10 +272,18 @@ class AppLocalizations {
       'auth.loginFailed': 'No se pudo iniciar sesión. Revisa tus credenciales.',
       'nav.dashboard': 'Panel',
       'nav.fighters': 'Peleadores',
+      'nav.contacts': 'Contactos',
+      'nav.locations': 'Ubicaciones',
+      'nav.whereabouts': 'Paradero',
+      'nav.checkins': 'Registros',
+      'nav.notifications': 'Notificaciones',
+      'nav.reports': 'Reportes',
+      'nav.settings': 'Configuración',
       'nav.language': 'Idioma',
       'dashboard.title': 'Panel de administración',
       'dashboard.subtitle': 'Administra peleadores y datos de la plataforma.',
       'dashboard.quickStats': 'Resumen',
+      'dashboard.dataOverviewTitle': 'Resumen de datos',
       'dashboard.totalFighters': 'Total de peleadores',
       'dashboard.activeFighters': 'Peleadores activos',
       'dashboard.disabledFighters': 'Peleadores deshabilitados',
@@ -242,8 +311,7 @@ class AppLocalizations {
       'fighters.dateOfBirth': 'Fecha de nacimiento',
       'fighters.selectDate': 'Selecciona fecha de nacimiento',
       'fighters.invalidDate': 'Selecciona una fecha válida.',
-      'fighters.futureDob':
-          'La fecha de nacimiento no puede ser en el futuro.',
+      'fighters.futureDob': 'La fecha de nacimiento no puede ser en el futuro.',
       'fighters.minAge': 'El peleador debe tener al menos 12 años.',
       'fighters.unrealisticDob': 'La fecha de nacimiento no es válida.',
       'fighters.gender': 'Género',
@@ -257,8 +325,23 @@ class AppLocalizations {
       'fighters.password': 'Contraseña temporal',
       'fighters.required': 'Completa todos los campos obligatorios.',
       'fighters.unknownError': 'Ocurrió un error inesperado.',
+      'common.comingSoon': 'Próximamente',
       'common.retry': 'Reintentar',
       'common.loading': 'Cargando...',
+      'comingSoon.contacts':
+          'La gestión de contactos es parte de un hito posterior y estará disponible pronto.',
+      'comingSoon.locations':
+          'La gestión de ubicaciones es parte de un hito posterior y estará disponible pronto.',
+      'comingSoon.whereabouts':
+          'El monitoreo de paradero es parte de un hito posterior y estará disponible pronto.',
+      'comingSoon.checkins':
+          'El monitoreo de registros es parte de un hito posterior y estará disponible pronto.',
+      'comingSoon.notifications':
+          'El monitoreo de notificaciones es parte de un hito posterior y estará disponible pronto.',
+      'comingSoon.reports':
+          'Los reportes son parte de un hito posterior y estarán disponibles pronto.',
+      'comingSoon.settings':
+          'La configuración es parte de un hito posterior y estará disponible pronto.',
     },
   };
 

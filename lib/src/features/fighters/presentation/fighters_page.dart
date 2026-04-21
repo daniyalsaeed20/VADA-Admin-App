@@ -14,28 +14,48 @@ class FightersPage extends ConsumerWidget {
     final loc = context.l10n;
     final fightersAsync = ref.watch(fightersStreamProvider);
     final mutationState = ref.watch(fighterMutationControllerProvider);
+    final isNarrow = MediaQuery.sizeOf(context).width < 760;
 
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                loc.tr('fighters.title'),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () {
-                  _openFighterDialog(context: context, ref: ref);
-                },
-                icon: const Icon(Icons.add),
-                label: Text(loc.tr('fighters.create')),
-              ),
-            ],
-          ),
+          if (isNarrow)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  loc.tr('fighters.title'),
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () {
+                    _openFighterDialog(context: context, ref: ref);
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text(loc.tr('fighters.create')),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Text(
+                  loc.tr('fighters.title'),
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () {
+                    _openFighterDialog(context: context, ref: ref);
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text(loc.tr('fighters.create')),
+                ),
+              ],
+            ),
           if (mutationState.errorMessage != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -54,7 +74,7 @@ class FightersPage extends ConsumerWidget {
           Expanded(
             child: fightersAsync.when(
               loading: () => Center(child: Text(loc.tr('fighters.loading'))),
-              error: (_, _) => Center(
+              error: (error, stackTrace) => Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -101,60 +121,68 @@ class _FightersTable extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.l10n;
+    final isCompact = MediaQuery.sizeOf(context).width < 1100;
 
-    return SingleChildScrollView(
-      child: DataTable(
-        columns: [
-          DataColumn(label: Text(loc.tr('fighters.fullName'))),
-          DataColumn(label: Text(loc.tr('fighters.email'))),
-          DataColumn(label: Text(loc.tr('fighters.phone'))),
-          DataColumn(label: Text(loc.tr('fighters.status'))),
-          DataColumn(label: Text(loc.tr('fighters.actions'))),
-        ],
-        rows: fighters.map((fighter) {
-          return DataRow(
-            cells: [
-              DataCell(Text(fighter.fullName)),
-              DataCell(Text(fighter.email)),
-              DataCell(Text(fighter.phone)),
-              DataCell(
-                Chip(
-                  label: Text(
-                    fighter.disabled
-                        ? loc.tr('fighters.disabled')
-                        : loc.tr('fighters.enabled'),
-                  ),
-                ),
-              ),
-              DataCell(
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () async {
-                        await showDialog<void>(
-                          context: context,
-                          builder: (_) => _FighterDialog(fighter: fighter),
-                        );
-                      },
-                    ),
-                    Switch(
-                      value: !fighter.disabled,
-                      onChanged: (isEnabled) async {
-                        await ref
-                            .read(fighterMutationControllerProvider.notifier)
-                            .toggleAccess(
-                              uid: fighter.uid,
-                              disabled: !isEnabled,
-                            );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+    return Scrollbar(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          child: DataTable(
+            columnSpacing: isCompact ? 16 : 36,
+            columns: [
+              DataColumn(label: Text(loc.tr('fighters.fullName'))),
+              DataColumn(label: Text(loc.tr('fighters.email'))),
+              DataColumn(label: Text(loc.tr('fighters.phone'))),
+              DataColumn(label: Text(loc.tr('fighters.status'))),
+              DataColumn(label: Text(loc.tr('fighters.actions'))),
             ],
-          );
-        }).toList(),
+            rows: fighters.map((fighter) {
+              return DataRow(
+                cells: [
+                  DataCell(Text(fighter.fullName)),
+                  DataCell(Text(fighter.email)),
+                  DataCell(Text(fighter.phone)),
+                  DataCell(
+                    Chip(
+                      label: Text(
+                        fighter.disabled
+                            ? loc.tr('fighters.disabled')
+                            : loc.tr('fighters.enabled'),
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () async {
+                            await showDialog<void>(
+                              context: context,
+                              builder: (_) => _FighterDialog(fighter: fighter),
+                            );
+                          },
+                        ),
+                        Switch(
+                          value: !fighter.disabled,
+                          onChanged: (isEnabled) async {
+                            await ref
+                                .read(
+                                    fighterMutationControllerProvider.notifier)
+                                .toggleAccess(
+                                  uid: fighter.uid,
+                                  disabled: !isEnabled,
+                                );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -224,13 +252,16 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
   Widget build(BuildContext context) {
     final loc = context.l10n;
     final mutation = ref.watch(fighterMutationControllerProvider);
+    final dialogWidth = MediaQuery.sizeOf(context).width < 640
+        ? MediaQuery.sizeOf(context).width * 0.88
+        : 500.0;
 
     return AlertDialog(
       title: Text(
         isEdit ? loc.tr('fighters.edit') : loc.tr('fighters.create'),
       ),
       content: SizedBox(
-        width: 500,
+        width: dialogWidth,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -374,8 +405,7 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
           border: const OutlineInputBorder(),
           suffixIcon: suffixIcon,
         ),
-        validator:
-            validator ??
+        validator: validator ??
             (value) {
               if (requiredField && (value == null || value.trim().isEmpty)) {
                 return context.l10n.tr('fighters.required');

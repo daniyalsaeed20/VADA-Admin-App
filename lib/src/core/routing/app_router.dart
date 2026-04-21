@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,7 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/fighters/presentation/fighters_page.dart';
+import '../../features/shared/presentation/coming_soon_page.dart';
 import '../../features/shell/presentation/admin_shell.dart';
 import 'router_refresh_stream.dart';
 
@@ -20,18 +22,70 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/login',
-        builder: (context, state) => const LoginPage(),
+        pageBuilder: (context, state) =>
+            _noTransitionPage(state: state, child: const LoginPage()),
       ),
       ShellRoute(
         builder: (context, state, child) => AdminShell(child: child),
         routes: [
           GoRoute(
             path: '/dashboard',
-            builder: (context, state) => const DashboardPage(),
+            pageBuilder: (context, state) =>
+                _noTransitionPage(state: state, child: const DashboardPage()),
           ),
           GoRoute(
             path: '/fighters',
-            builder: (context, state) => const FightersPage(),
+            pageBuilder: (context, state) =>
+                _noTransitionPage(state: state, child: const FightersPage()),
+          ),
+          GoRoute(
+            path: '/contacts',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.contacts'),
+            ),
+          ),
+          GoRoute(
+            path: '/locations',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.locations'),
+            ),
+          ),
+          GoRoute(
+            path: '/whereabouts',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.whereabouts'),
+            ),
+          ),
+          GoRoute(
+            path: '/checkins',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.checkins'),
+            ),
+          ),
+          GoRoute(
+            path: '/notifications',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.notifications'),
+            ),
+          ),
+          GoRoute(
+            path: '/reports',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.reports'),
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child: const ComingSoonPage(titleKey: 'nav.settings'),
+            ),
           ),
         ],
       ),
@@ -45,9 +99,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return onLoginPage ? null : '/login';
       }
 
-      final isAdmin = await ref.read(authRepositoryProvider).isAdmin(user.uid);
+      final isAdmin = await authRepo.isAdmin(user.uid);
       if (!isAdmin) {
-        await ref.read(authRepositoryProvider).logout();
+        await authRepo.logout();
         return '/login';
       }
 
@@ -58,3 +112,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+NoTransitionPage<void> _noTransitionPage({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return NoTransitionPage<void>(key: state.pageKey, child: child);
+}
