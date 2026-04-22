@@ -28,6 +28,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     final loc = context.l10n;
     final contactsAsync = ref.watch(contactsStreamProvider);
     final mutation = ref.watch(contactMutationControllerProvider);
+    final errorMessage = mutation.errorMessage;
+    final successMessage = mutation.successMessage;
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 900;
 
@@ -67,12 +69,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                 ),
               ],
             ),
-          if (mutation.errorMessage != null)
+          if (errorMessage != null)
+            _MutationBanner(message: loc.tr(errorMessage), isError: true),
+          if (successMessage != null)
             _MutationBanner(
-                message: loc.tr(mutation.errorMessage!), isError: true),
-          if (mutation.successMessage != null)
-            _MutationBanner(
-              message: loc.tr(mutation.successMessage!),
+              message: loc.tr(successMessage),
               isError: false,
             ),
           SizedBox(height: AppLayout.mediumGap(context)),
@@ -364,15 +365,20 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
           onPressed: mutation.isLoading
               ? null
               : () async {
-                  if (!_formKey.currentState!.validate()) {
+                  final formState = _formKey.currentState;
+                  if (formState == null || !formState.validate()) {
                     return;
                   }
                   final notifier = ref.read(
                     contactMutationControllerProvider.notifier,
                   );
                   if (isEdit) {
+                    final contact = widget.contact;
+                    if (contact == null) {
+                      return;
+                    }
                     await notifier.update(
-                      id: widget.contact!.id,
+                      id: contact.id,
                       name: _nameController.text,
                       phone: _phoneController.text,
                       email: _emailController.text,

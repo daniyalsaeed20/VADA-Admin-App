@@ -22,7 +22,7 @@ class Contact {
   final DateTime? updatedAt;
 
   factory Contact.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data()!;
+    final data = doc.data() ?? <String, dynamic>{};
     return Contact(
       id: doc.id,
       name: data['name'] as String? ?? '',

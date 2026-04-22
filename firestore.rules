@@ -1,8 +1,13 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function userDoc() {
@@ -10,24 +15,61 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && userDoc().data.role == 'admin';
+      return isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && userDoc().data.role == 'admin';
     }
 
+    function isFighter() {
+      return isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && userDoc().data.role == 'fighter';
+    }
+
+    function fighterOwnsResource() {
+      return resource.data.keys().hasAll(['fighterId'])
+          && resource.data.fighterId == request.auth.uid;
+    }
+
+    function fighterOwnsRequestResource() {
+      return request.resource.data.keys().hasAll(['fighterId'])
+          && request.resource.data.fighterId == request.auth.uid;
+    }
+
+    // Users collection
     match /users/{userId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isSelf(userId);
       allow create, update, delete: if isAdmin();
     }
 
+    // Contacts: fighter-owned by fighterId
     match /contacts/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin()
+          || (isFighter() && (docId == '_meta' || fighterOwnsResource()));
+
+      allow create: if isAdmin()
+          || (isFighter() && fighterOwnsRequestResource());
+
+      allow update, delete: if isAdmin()
+          || (isFighter() && fighterOwnsResource());
     }
 
+    // Locations: fighters are view-only
     match /locations/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() || isFighter();
+      allow write: if isAdmin();
     }
 
+    // Schedules / Whereabouts: fighter-owned by fighterId
     match /schedules/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin()
+          || (isFighter() && (docId == '_meta' || fighterOwnsResource()));
+
+      allow create: if isAdmin()
+          || (isFighter() && fighterOwnsRequestResource());
+
+      allow update, delete: if isAdmin()
+          || (isFighter() && fighterOwnsResource());
     }
 
     match /checkins/{docId} {
@@ -36,6 +78,10 @@ service cloud.firestore {
 
     match /notifications/{docId} {
       allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
