@@ -31,8 +31,70 @@
 
   <title>VADA Admin</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      font-family: Arial, sans-serif;
+    }
+
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #ffffff;
+      z-index: 9999;
+    }
+
+    #app-loader img {
+      width: 220px;
+      height: auto;
+    }
+
+    .line-loader {
+      width: 220px;
+      height: 8px;
+      border-radius: 999px;
+      background: #ececec;
+      overflow: hidden;
+    }
+
+    .line-loader::before {
+      content: "";
+      display: block;
+      width: 45%;
+      height: 100%;
+      border-radius: 999px;
+      background: #b50e16;
+      animation: slide 1s ease-in-out infinite;
+    }
+
+    @keyframes slide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(260%); }
+    }
+  </style>
 </head>
 <body>
+  <div id="app-loader">
+    <img src="assets/assets/vada_logo.png" alt="VADA Admin" />
+    <div class="line-loader"></div>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      const loader = document.getElementById('app-loader');
+      if (loader) {
+        loader.remove();
+      }
+    });
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
