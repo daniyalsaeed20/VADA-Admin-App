@@ -8,6 +8,8 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/fighters/presentation/fighters_page.dart';
+import '../../features/contacts/presentation/contacts_page.dart';
+import '../../features/locations/presentation/locations_page.dart';
 import '../../features/shared/presentation/coming_soon_page.dart';
 import '../../features/shell/presentation/admin_shell.dart';
 import 'router_refresh_stream.dart';
@@ -41,17 +43,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.contacts,
-            pageBuilder: (context, state) => _noTransitionPage(
-              state: state,
-              child: const ComingSoonPage(titleKey: 'nav.contacts'),
-            ),
+            pageBuilder: (context, state) =>
+                _noTransitionPage(state: state, child: const ContactsPage()),
           ),
           GoRoute(
             path: AppRoutes.locations,
-            pageBuilder: (context, state) => _noTransitionPage(
-              state: state,
-              child: const ComingSoonPage(titleKey: 'nav.locations'),
-            ),
+            pageBuilder: (context, state) =>
+                _noTransitionPage(state: state, child: const LocationsPage()),
           ),
           GoRoute(
             path: AppRoutes.whereabouts,

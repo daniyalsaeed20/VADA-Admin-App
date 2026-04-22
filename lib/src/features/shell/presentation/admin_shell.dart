@@ -9,7 +9,6 @@ import '../../../core/localization/locale_controller.dart';
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../../bootstrap/bootstrap_service.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({required this.child, super.key});
@@ -18,7 +17,6 @@ class AdminShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(bootstrapCollectionsProvider);
     final currentPath = GoRouterState.of(context).matchedLocation;
     final locale = ref.watch(localeControllerProvider);
     final loc = context.l10n;
