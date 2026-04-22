@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +23,10 @@ class WhereaboutsPage extends ConsumerStatefulWidget {
 }
 
 class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
+  static const List<int> _rowsPerPageOptions = [10, 20, 50];
   final TextEditingController _searchController = TextEditingController();
+  int _rowsPerPage = _rowsPerPageOptions.first;
+  int _page = 0;
 
   @override
   void dispose() {
@@ -91,7 +96,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
           SizedBox(height: AppLayout.mediumGap(context)),
           TextField(
             controller: _searchController,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _page = 0),
             decoration: InputDecoration(
               labelText: loc.tr('whereabouts.search'),
               prefixIcon: const Icon(Icons.search),
@@ -127,125 +132,214 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                 if (filtered.isEmpty) {
                   return Center(child: Text(loc.tr('whereabouts.noResults')));
                 }
+                final totalPages =
+                    math.max(1, (filtered.length / _rowsPerPage).ceil());
+                final currentPage = _page.clamp(0, totalPages - 1).toInt();
+                final startIndex =
+                    filtered.isEmpty ? 0 : currentPage * _rowsPerPage;
+                final endIndex = filtered.isEmpty
+                    ? 0
+                    : math.min(startIndex + _rowsPerPage, filtered.length);
+                final pageItems = filtered.isEmpty
+                    ? const <WhereaboutsEntry>[]
+                    : filtered.sublist(startIndex, endIndex);
 
-                if (isNarrow) {
-                  return ListView.separated(
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: AppLayout.smallGap(context)),
-                    itemBuilder: (context, index) {
-                      final item = filtered[index];
-                      final fighterName = fighterNames[item.fighterId] ??
-                          loc.tr('whereabouts.na');
-                      final locationName = locationNames[item.locationId] ??
-                          loc.tr('whereabouts.na');
-                      final contactName = contactNames[item.contactId] ??
-                          loc.tr('whereabouts.na');
-                      return Card(
-                        child: Padding(
-                          padding:
-                              EdgeInsets.all(AppLayout.cardPadding(context)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '$fighterName - ${item.date}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
+                return Column(
+                  children: [
+                    Expanded(
+                      child: isNarrow
+                          ? ListView.separated(
+                              itemCount: pageItems.length,
+                              separatorBuilder: (_, _) =>
+                                  SizedBox(height: AppLayout.smallGap(context)),
+                              itemBuilder: (context, index) {
+                                final item = pageItems[index];
+                                final fighterName =
+                                    fighterNames[item.fighterId] ??
+                                        loc.tr('whereabouts.na');
+                                final locationName =
+                                    locationNames[item.locationId] ??
+                                        loc.tr('whereabouts.na');
+                                final contactName =
+                                    contactNames[item.contactId] ??
+                                        loc.tr('whereabouts.na');
+                                return Card(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(
+                                      AppLayout.cardPadding(context),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                '$fighterName - ${item.date}',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip:
+                                                  loc.tr('whereabouts.edit'),
+                                              onPressed: () => _openEditDialog(
+                                                item: item,
+                                                fighters: fightersAsync
+                                                        .asData?.value ??
+                                                    const [],
+                                                contacts: contactsAsync
+                                                        .asData?.value ??
+                                                    const <Contact>[],
+                                                locations: locationsAsync
+                                                        .asData?.value ??
+                                                    const <LocationRecord>[],
+                                              ),
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                            '${item.startTime} - ${item.endTime}'),
+                                        Text(locationName),
+                                        Text(contactName),
+                                        SizedBox(
+                                          height: AppLayout.smallGap(context),
+                                        ),
+                                        Chip(
+                                          label: Text(
+                                            loc.tr(
+                                              _recurrenceLabelKey(
+                                                  item.recurrence),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  IconButton(
-                                    tooltip: loc.tr('whereabouts.edit'),
-                                    onPressed: () => _openEditDialog(
-                                      item: item,
-                                      fighters: fightersAsync.asData?.value ??
-                                          const [],
-                                      contacts: contactsAsync.asData?.value ??
-                                          const <Contact>[],
-                                      locations: locationsAsync.asData?.value ??
-                                          const <LocationRecord>[],
+                                );
+                              },
+                            )
+                          : SingleChildScrollView(
+                              child: DataTable(
+                                columns: [
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.fighter')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.date')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.time')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.location')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.contact')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      loc.tr('whereabouts.recurrence'),
                                     ),
-                                    icon: const Icon(Icons.edit_outlined),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('whereabouts.actions')),
                                   ),
                                 ],
+                                rows: pageItems.map((item) {
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        Text(
+                                          fighterNames[item.fighterId] ??
+                                              loc.tr('whereabouts.na'),
+                                        ),
+                                      ),
+                                      DataCell(Text(item.date)),
+                                      DataCell(
+                                        Text(
+                                            '${item.startTime} - ${item.endTime}'),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          locationNames[item.locationId] ??
+                                              loc.tr('whereabouts.na'),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          contactNames[item.contactId] ??
+                                              loc.tr('whereabouts.na'),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          loc.tr(
+                                            _recurrenceLabelKey(
+                                                item.recurrence),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        IconButton(
+                                          tooltip: loc.tr('whereabouts.edit'),
+                                          onPressed: () => _openEditDialog(
+                                            item: item,
+                                            fighters:
+                                                fightersAsync.asData?.value ??
+                                                    const [],
+                                            contacts:
+                                                contactsAsync.asData?.value ??
+                                                    const <Contact>[],
+                                            locations:
+                                                locationsAsync.asData?.value ??
+                                                    const <LocationRecord>[],
+                                          ),
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
                               ),
-                              Text('${item.startTime} - ${item.endTime}'),
-                              Text(locationName),
-                              Text(contactName),
-                              SizedBox(height: AppLayout.smallGap(context)),
-                              Chip(
-                                label: Text(
-                                  loc.tr(_recurrenceLabelKey(item.recurrence)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                }
-
-                return SingleChildScrollView(
-                  child: DataTable(
-                    columns: [
-                      DataColumn(label: Text(loc.tr('whereabouts.fighter'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.date'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.time'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.location'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.contact'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.recurrence'))),
-                      DataColumn(label: Text(loc.tr('whereabouts.actions'))),
-                    ],
-                    rows: filtered.map((item) {
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Text(
-                              fighterNames[item.fighterId] ??
-                                  loc.tr('whereabouts.na'),
                             ),
-                          ),
-                          DataCell(Text(item.date)),
-                          DataCell(Text('${item.startTime} - ${item.endTime}')),
-                          DataCell(
-                            Text(
-                              locationNames[item.locationId] ??
-                                  loc.tr('whereabouts.na'),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              contactNames[item.contactId] ??
-                                  loc.tr('whereabouts.na'),
-                            ),
-                          ),
-                          DataCell(
-                            Text(loc.tr(_recurrenceLabelKey(item.recurrence))),
-                          ),
-                          DataCell(
-                            IconButton(
-                              tooltip: loc.tr('whereabouts.edit'),
-                              onPressed: () => _openEditDialog(
-                                item: item,
-                                fighters:
-                                    fightersAsync.asData?.value ?? const [],
-                                contacts: contactsAsync.asData?.value ??
-                                    const <Contact>[],
-                                locations: locationsAsync.asData?.value ??
-                                    const <LocationRecord>[],
-                              ),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                    ),
+                    SizedBox(height: AppLayout.smallGap(context)),
+                    _WhereaboutsPagination(
+                      rowsPerPage: _rowsPerPage,
+                      rowsPerPageOptions: _rowsPerPageOptions,
+                      startIndex: startIndex,
+                      endIndex: endIndex,
+                      totalCount: filtered.length,
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      onRowsPerPageChanged: (value) {
+                        setState(() {
+                          _rowsPerPage = value;
+                          _page = 0;
+                        });
+                      },
+                      onPreviousPage: currentPage == 0
+                          ? null
+                          : () {
+                              setState(() {
+                                _page = currentPage - 1;
+                              });
+                            },
+                      onNextPage: currentPage >= totalPages - 1
+                          ? null
+                          : () {
+                              setState(() {
+                                _page = currentPage + 1;
+                              });
+                            },
+                    ),
+                  ],
                 );
               },
             ),
@@ -297,6 +391,80 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
     if (mounted) {
       ref.read(whereaboutsMutationControllerProvider.notifier).clearMessages();
     }
+  }
+}
+
+class _WhereaboutsPagination extends StatelessWidget {
+  const _WhereaboutsPagination({
+    required this.rowsPerPage,
+    required this.rowsPerPageOptions,
+    required this.startIndex,
+    required this.endIndex,
+    required this.totalCount,
+    required this.currentPage,
+    required this.totalPages,
+    required this.onRowsPerPageChanged,
+    required this.onPreviousPage,
+    required this.onNextPage,
+  });
+
+  final int rowsPerPage;
+  final List<int> rowsPerPageOptions;
+  final int startIndex;
+  final int endIndex;
+  final int totalCount;
+  final int currentPage;
+  final int totalPages;
+  final ValueChanged<int> onRowsPerPageChanged;
+  final VoidCallback? onPreviousPage;
+  final VoidCallback? onNextPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: AppLayout.smallGap(context)),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppLayout.mediumGap(context),
+        runSpacing: AppLayout.smallGap(context),
+        children: [
+          DropdownButton<int>(
+            value: rowsPerPage,
+            onChanged: (value) {
+              if (value != null) {
+                onRowsPerPageChanged(value);
+              }
+            },
+            items: rowsPerPageOptions
+                .map(
+                  (option) => DropdownMenuItem<int>(
+                    value: option,
+                    child: Text(option.toString()),
+                  ),
+                )
+                .toList(),
+          ),
+          Text(
+            totalCount == 0 ? '0' : '${startIndex + 1}-$endIndex / $totalCount',
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: onPreviousPage,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${currentPage + 1}/$totalPages'),
+              IconButton(
+                onPressed: onNextPage,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

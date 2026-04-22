@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,7 +19,10 @@ class LocationsPage extends ConsumerStatefulWidget {
 }
 
 class _LocationsPageState extends ConsumerState<LocationsPage> {
+  static const List<int> _rowsPerPageOptions = [10, 20, 50];
   final TextEditingController _searchController = TextEditingController();
+  int _rowsPerPage = _rowsPerPageOptions.first;
+  int _page = 0;
 
   @override
   void dispose() {
@@ -90,7 +95,7 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
               prefixIcon: const Icon(Icons.search),
               isDense: true,
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _page = 0),
           ),
           SizedBox(height: AppLayout.mediumGap(context)),
           Expanded(
@@ -114,118 +119,189 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                 if (filtered.isEmpty) {
                   return Center(child: Text(loc.tr('locations.noResults')));
                 }
+                final totalPages =
+                    math.max(1, (filtered.length / _rowsPerPage).ceil());
+                final currentPage = _page.clamp(0, totalPages - 1).toInt();
+                final startIndex =
+                    filtered.isEmpty ? 0 : currentPage * _rowsPerPage;
+                final endIndex = filtered.isEmpty
+                    ? 0
+                    : math.min(startIndex + _rowsPerPage, filtered.length);
+                final pageItems = filtered.isEmpty
+                    ? const <LocationRecord>[]
+                    : filtered.sublist(startIndex, endIndex);
 
-                if (isNarrow) {
-                  return ListView.separated(
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: AppLayout.smallGap(context)),
-                    itemBuilder: (context, index) {
-                      final item = filtered[index];
-                      final assigneeLabels = _assigneeLabels(
-                        item: item,
-                        fighterNameById: fighterNameById,
-                        loc: loc,
-                      );
-                      return Card(
-                        child: Padding(
-                          padding:
-                              EdgeInsets.all(AppLayout.cardPadding(context)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      item.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
+                return Column(
+                  children: [
+                    Expanded(
+                      child: isNarrow
+                          ? ListView.separated(
+                              itemCount: pageItems.length,
+                              separatorBuilder: (_, _) =>
+                                  SizedBox(height: AppLayout.smallGap(context)),
+                              itemBuilder: (context, index) {
+                                final item = pageItems[index];
+                                final assigneeLabels = _assigneeLabels(
+                                  item: item,
+                                  fighterNameById: fighterNameById,
+                                  loc: loc,
+                                );
+                                return Card(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(
+                                      AppLayout.cardPadding(context),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item.name,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: loc.tr('locations.edit'),
+                                              onPressed: () => _openEditDialog(
+                                                  item, fighters),
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(item.address),
+                                        SizedBox(
+                                          height: AppLayout.smallGap(context),
+                                        ),
+                                        Chip(
+                                          label: Text(
+                                            loc.tr(_locationTypeLabelKey(
+                                                item.type)),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          height: AppLayout.smallGap(context),
+                                        ),
+                                        Wrap(
+                                          spacing: AppLayout.smallGap(context),
+                                          runSpacing:
+                                              AppLayout.smallGap(context),
+                                          children: assigneeLabels
+                                              .map((name) =>
+                                                  Chip(label: Text(name)))
+                                              .toList(),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  IconButton(
-                                    tooltip: loc.tr('locations.edit'),
-                                    onPressed: () =>
-                                        _openEditDialog(item, fighters),
-                                    icon: const Icon(Icons.edit_outlined),
+                                );
+                              },
+                            )
+                          : SingleChildScrollView(
+                              child: DataTable(
+                                columns: [
+                                  DataColumn(
+                                    label: Text(loc.tr('locations.name')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('locations.address')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('locations.type')),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      loc.tr('locations.assignedFighters'),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(loc.tr('locations.actions')),
                                   ),
                                 ],
-                              ),
-                              Text(item.address),
-                              SizedBox(height: AppLayout.smallGap(context)),
-                              Chip(
-                                label: Text(
-                                    loc.tr(_locationTypeLabelKey(item.type))),
-                              ),
-                              SizedBox(height: AppLayout.smallGap(context)),
-                              Wrap(
-                                spacing: AppLayout.smallGap(context),
-                                runSpacing: AppLayout.smallGap(context),
-                                children: assigneeLabels
-                                    .map((name) => Chip(label: Text(name)))
-                                    .toList(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                }
-
-                return SingleChildScrollView(
-                  child: DataTable(
-                    columns: [
-                      DataColumn(label: Text(loc.tr('locations.name'))),
-                      DataColumn(label: Text(loc.tr('locations.address'))),
-                      DataColumn(label: Text(loc.tr('locations.type'))),
-                      DataColumn(
-                          label: Text(loc.tr('locations.assignedFighters'))),
-                      DataColumn(label: Text(loc.tr('locations.actions'))),
-                    ],
-                    rows: filtered.map((item) {
-                      final assigneeLabels = _assigneeLabels(
-                        item: item,
-                        fighterNameById: fighterNameById,
-                        loc: loc,
-                      );
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(item.name)),
-                          DataCell(
-                            SizedBox(
-                              width: 230,
-                              child: Text(
-                                item.address,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                rows: pageItems.map((item) {
+                                  final assigneeLabels = _assigneeLabels(
+                                    item: item,
+                                    fighterNameById: fighterNameById,
+                                    loc: loc,
+                                  );
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(item.name)),
+                                      DataCell(
+                                        SizedBox(
+                                          width: 230,
+                                          child: Text(
+                                            item.address,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(loc.tr(
+                                            _locationTypeLabelKey(item.type))),
+                                      ),
+                                      DataCell(
+                                        SizedBox(
+                                          width: 240,
+                                          child: Text(
+                                            assigneeLabels.join(', '),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        IconButton(
+                                          tooltip: loc.tr('locations.edit'),
+                                          onPressed: () =>
+                                              _openEditDialog(item, fighters),
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
                               ),
                             ),
-                          ),
-                          DataCell(
-                              Text(loc.tr(_locationTypeLabelKey(item.type)))),
-                          DataCell(
-                            SizedBox(
-                              width: 240,
-                              child: Text(
-                                assigneeLabels.join(', '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            IconButton(
-                              tooltip: loc.tr('locations.edit'),
-                              onPressed: () => _openEditDialog(item, fighters),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                    ),
+                    SizedBox(height: AppLayout.smallGap(context)),
+                    _LocationsPagination(
+                      rowsPerPage: _rowsPerPage,
+                      rowsPerPageOptions: _rowsPerPageOptions,
+                      startIndex: startIndex,
+                      endIndex: endIndex,
+                      totalCount: filtered.length,
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      onRowsPerPageChanged: (value) {
+                        setState(() {
+                          _rowsPerPage = value;
+                          _page = 0;
+                        });
+                      },
+                      onPreviousPage: currentPage == 0
+                          ? null
+                          : () {
+                              setState(() {
+                                _page = currentPage - 1;
+                              });
+                            },
+                      onNextPage: currentPage >= totalPages - 1
+                          ? null
+                          : () {
+                              setState(() {
+                                _page = currentPage + 1;
+                              });
+                            },
+                    ),
+                  ],
                 );
               },
             ),
@@ -286,6 +362,80 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
     if (mounted) {
       ref.read(locationMutationControllerProvider.notifier).clearMessages();
     }
+  }
+}
+
+class _LocationsPagination extends StatelessWidget {
+  const _LocationsPagination({
+    required this.rowsPerPage,
+    required this.rowsPerPageOptions,
+    required this.startIndex,
+    required this.endIndex,
+    required this.totalCount,
+    required this.currentPage,
+    required this.totalPages,
+    required this.onRowsPerPageChanged,
+    required this.onPreviousPage,
+    required this.onNextPage,
+  });
+
+  final int rowsPerPage;
+  final List<int> rowsPerPageOptions;
+  final int startIndex;
+  final int endIndex;
+  final int totalCount;
+  final int currentPage;
+  final int totalPages;
+  final ValueChanged<int> onRowsPerPageChanged;
+  final VoidCallback? onPreviousPage;
+  final VoidCallback? onNextPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: AppLayout.smallGap(context)),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppLayout.mediumGap(context),
+        runSpacing: AppLayout.smallGap(context),
+        children: [
+          DropdownButton<int>(
+            value: rowsPerPage,
+            onChanged: (value) {
+              if (value != null) {
+                onRowsPerPageChanged(value);
+              }
+            },
+            items: rowsPerPageOptions
+                .map(
+                  (option) => DropdownMenuItem<int>(
+                    value: option,
+                    child: Text(option.toString()),
+                  ),
+                )
+                .toList(),
+          ),
+          Text(
+            totalCount == 0 ? '0' : '${startIndex + 1}-$endIndex / $totalCount',
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: onPreviousPage,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${currentPage + 1}/$totalPages'),
+              IconButton(
+                onPressed: onNextPage,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
