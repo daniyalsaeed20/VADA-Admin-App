@@ -89,6 +89,7 @@ class AdminShell extends ConsumerWidget {
           actions: [
             _LocaleMenuButton(
               locale: locale,
+              useProminentStyle: true,
               onSelected: (newLocale) {
                 ref
                     .read(localeControllerProvider.notifier)
@@ -308,14 +309,20 @@ class _RailTrailingControls extends ConsumerWidget {
 }
 
 class _LocaleMenuButton extends StatelessWidget {
-  const _LocaleMenuButton({required this.locale, required this.onSelected});
+  const _LocaleMenuButton({
+    required this.locale,
+    required this.onSelected,
+    this.useProminentStyle = false,
+  });
 
   final Locale locale;
   final ValueChanged<Locale> onSelected;
+  final bool useProminentStyle;
 
   @override
   Widget build(BuildContext context) {
     final loc = context.l10n;
+    final colorScheme = Theme.of(context).colorScheme;
     return PopupMenuButton<Locale>(
       tooltip: loc.tr('nav.language'),
       initialValue: locale,
@@ -330,9 +337,56 @@ class _LocaleMenuButton extends StatelessWidget {
             )
             .toList();
       },
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        child: Icon(Icons.language),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.symmetric(
+            horizontal: useProminentStyle ? 12 : 8,
+            vertical: useProminentStyle ? 6 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: useProminentStyle
+                ? colorScheme.primaryContainer
+                : colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: useProminentStyle
+                  ? colorScheme.primary.withValues(alpha: 0.55)
+                  : colorScheme.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.translate_rounded,
+                size: useProminentStyle ? 18 : 16,
+                color: useProminentStyle
+                    ? colorScheme.onPrimaryContainer
+                    : colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                locale.languageCode.toUpperCase(),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: useProminentStyle
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (useProminentStyle) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 18,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

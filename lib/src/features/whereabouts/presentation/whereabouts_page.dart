@@ -537,6 +537,7 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
         width: dialogWidth,
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -809,6 +810,14 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
         if (value == null || value.trim().isEmpty) {
           return context.l10n.tr('fighters.required');
         }
+        if (_parseTime(value.trim()) == null) {
+          return context.l10n.tr('whereabouts.invalidTime');
+        }
+        final start = _startTimeController.text.trim();
+        final end = _endTimeController.text.trim();
+        if (start.isNotEmpty && end.isNotEmpty && !_isTimeRangeValid(start, end)) {
+          return context.l10n.tr('whereabouts.invalidTime');
+        }
         return null;
       },
     );
@@ -942,6 +951,9 @@ TimeOfDay? _parseTime(String raw) {
   final hour = int.tryParse(parts[0]);
   final minute = int.tryParse(parts[1]);
   if (hour == null || minute == null) {
+    return null;
+  }
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
     return null;
   }
   return TimeOfDay(hour: hour, minute: minute);

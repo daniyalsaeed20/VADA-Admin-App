@@ -42,41 +42,63 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         }
 
         if (snapshot.hasError) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: Scaffold(
-              body: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, size: 40),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Failed to initialize app. Please retry.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () {
-                          setState(() {
-                            _initialization = _initializeFirebase();
-                          });
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
+          return _BootstrapMaterialApp(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 40),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Failed to initialize app. Please retry.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () {
+                        setState(() {
+                          _initialization = _initializeFirebase();
+                        });
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
               ),
             ),
           );
         }
 
-        return const MaterialApp(
-          debugShowCheckedModeBanner: false,
-          home: _LaunchSplashScreen(),
+        return const _BootstrapMaterialApp(
+          child: _LaunchSplashScreen(),
+        );
+      },
+    );
+  }
+}
+
+class _BootstrapMaterialApp extends StatelessWidget {
+  const _BootstrapMaterialApp({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFB50E16)),
+      ),
+      // Accept any initial route (e.g. "/login" on web refresh) while the
+      // bootstrap splash is active, preventing "no corresponding route" errors.
+      onGenerateRoute: (settings) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => Scaffold(body: child),
         );
       },
     );
@@ -88,20 +110,18 @@ class _LaunchSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset(
-              'assets/vada_logo.png',
-              width: 220,
-              fit: BoxFit.contain,
-            ),
-            const SizedBox(height: 24),
-            const _LineLoader(),
-          ],
-        ),
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image(
+            image: AssetImage('assets/vada_logo.png'),
+            width: 220,
+            fit: BoxFit.contain,
+          ),
+          SizedBox(height: 24),
+          _LineLoader(),
+        ],
       ),
     );
   }
