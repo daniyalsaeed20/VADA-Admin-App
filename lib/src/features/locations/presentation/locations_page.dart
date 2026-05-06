@@ -455,6 +455,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
+  late final TextEditingController _fighterSearchController;
   late String _selectedType;
   late Set<String> _assignedFighterIds;
 
@@ -466,6 +467,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     final item = widget.location;
     _nameController = TextEditingController(text: item?.name ?? '');
     _addressController = TextEditingController(text: item?.address ?? '');
+    _fighterSearchController = TextEditingController();
     _selectedType = _types.contains(item?.type) ? item!.type : 'testing';
     _assignedFighterIds = {...(item?.assignedFighterIds ?? const <String>[])};
   }
@@ -474,6 +476,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _fighterSearchController.dispose();
     super.dispose();
   }
 
@@ -540,26 +543,48 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   )
                 else
-                  Wrap(
-                    spacing: AppLayout.smallGap(context),
-                    runSpacing: AppLayout.smallGap(context),
-                    children: widget.fighters.map((fighter) {
-                      final isSelected =
-                          _assignedFighterIds.contains(fighter.uid);
-                      return FilterChip(
-                        label: Text(fighter.fullName),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              _assignedFighterIds.add(fighter.uid);
-                            } else {
-                              _assignedFighterIds.remove(fighter.uid);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
+                  Column(
+                    children: [
+                      TextField(
+                        controller: _fighterSearchController,
+                        decoration: InputDecoration(
+                          labelText: loc.tr('common.search'),
+                          prefixIcon: const Icon(Icons.search),
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 260),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: _filteredFighters()
+                              .map((fighter) => CheckboxListTile(
+                                    dense: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    value: _assignedFighterIds
+                                        .contains(fighter.uid),
+                                    title: Text(
+                                      fighter.fullName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onChanged: (selected) {
+                                      setState(() {
+                                        if (selected == true) {
+                                          _assignedFighterIds.add(fighter.uid);
+                                        } else {
+                                          _assignedFighterIds.remove(fighter.uid);
+                                        }
+                                      });
+                                    },
+                                  ))
+                              .toList(),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -629,6 +654,18 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
         return null;
       },
     );
+  }
+
+  List<Fighter> _filteredFighters() {
+    final query = _fighterSearchController.text.trim().toLowerCase();
+    final fighters = widget.fighters.toList()
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    if (query.isEmpty) {
+      return fighters;
+    }
+    return fighters
+        .where((f) => f.fullName.toLowerCase().contains(query))
+        .toList();
   }
 }
 

@@ -497,7 +497,7 @@ class _FightersMobileList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListView.separated(
       itemCount: fighters.length,
-      separatorBuilder: (_, __) =>
+      separatorBuilder: (_, _) =>
           SizedBox(height: AppLayout.smallGap(context)),
       itemBuilder: (context, index) {
         final fighter = fighters[index];
