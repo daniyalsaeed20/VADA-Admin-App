@@ -7,6 +7,7 @@ class AdminMessageRequest {
     required this.body,
     required this.target,
     required this.targetUserId,
+    required this.data,
     required this.status,
     required this.createdAt,
     required this.sentAt,
@@ -18,6 +19,7 @@ class AdminMessageRequest {
   final String body;
   final String target; // broadcast | user
   final String? targetUserId;
+  final Map<String, String> data;
   final String status; // pending | sent | failed
   final DateTime? createdAt;
   final DateTime? sentAt;
@@ -33,6 +35,8 @@ class AdminMessageRequest {
       body: (data['body'] as String? ?? '').trim(),
       target: (data['target'] as String? ?? 'broadcast').trim(),
       targetUserId: (data['targetUserId'] as String?)?.trim(),
+      data: (data['data'] as Map<String, dynamic>? ?? const <String, dynamic>{})
+          .map((k, v) => MapEntry(k, v.toString())),
       status: (data['status'] as String? ?? 'pending').trim(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       sentAt: (data['sentAt'] as Timestamp?)?.toDate(),

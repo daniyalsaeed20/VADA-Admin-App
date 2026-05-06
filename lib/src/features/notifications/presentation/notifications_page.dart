@@ -98,6 +98,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       _HistoryCard(
                         messagesAsync: messagesAsync,
                         fighterNameById: fighterNameById,
+                        fighters: fighters,
                       ),
                     ],
                   )
@@ -136,6 +137,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         child: _HistoryCard(
                           messagesAsync: messagesAsync,
                           fighterNameById: fighterNameById,
+                          fighters: fighters,
                         ),
                       ),
                     ],
@@ -338,10 +340,12 @@ class _HistoryCard extends StatelessWidget {
   const _HistoryCard({
     required this.messagesAsync,
     required this.fighterNameById,
+    required this.fighters,
   });
 
   final AsyncValue<List<AdminMessageRequest>> messagesAsync;
   final Map<String, String> fighterNameById;
+  final List<Fighter> fighters;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +388,24 @@ class _HistoryCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         isThreeLine: true,
-                        trailing: _StatusChip(status: item.status),
+                        trailing: Wrap(
+                          spacing: 10,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            IconButton(
+                              tooltip: 'Resend (edit)',
+                              onPressed: () => showDialog<void>(
+                                context: context,
+                                builder: (_) => _ResendAdminMessageDialog(
+                                  original: item,
+                                  fighters: fighters,
+                                ),
+                              ),
+                              icon: const Icon(Icons.replay_outlined),
+                            ),
+                            _StatusChip(status: item.status),
+                          ],
+                        ),
                       );
                     },
                   );
@@ -478,5 +499,222 @@ class _FighterOption {
 
   final String uid;
   final String label;
+}
+
+class _ResendAdminMessageDialog extends ConsumerStatefulWidget {
+  const _ResendAdminMessageDialog({
+    required this.original,
+    required this.fighters,
+  });
+
+  final AdminMessageRequest original;
+  final List<Fighter> fighters;
+
+  @override
+  ConsumerState<_ResendAdminMessageDialog> createState() =>
+      _ResendAdminMessageDialogState();
+}
+
+class _ResendAdminMessageDialogState
+    extends ConsumerState<_ResendAdminMessageDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _titleController;
+  late final TextEditingController _bodyController;
+  late String _target;
+  late String _targetUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.original.title);
+    _bodyController = TextEditingController(text: widget.original.body);
+    _target = widget.original.target.trim().isEmpty
+        ? 'broadcast'
+        : widget.original.target.trim();
+    _targetUserId = widget.original.targetUserId ?? '';
+    if (_target != 'user') {
+      _targetUserId = '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    final mutation = ref.watch(adminMessageMutationControllerProvider);
+    final fighters = widget.fighters.toList()
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+
+    String? selectedName;
+    if (_targetUserId.isNotEmpty) {
+      for (final f in fighters) {
+        if (f.uid == _targetUserId) {
+          selectedName = f.fullName;
+          break;
+        }
+      }
+    }
+
+    final options = fighters
+        .map((f) => _FighterOption(uid: f.uid, label: f.fullName))
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Resend admin message'),
+      content: SizedBox(
+        width: 560,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'broadcast', label: Text('Broadcast')),
+                    ButtonSegment(value: 'user', label: Text('Specific fighter')),
+                  ],
+                  selected: {_target},
+                  onSelectionChanged: (value) {
+                    setState(() {
+                      _target = value.first;
+                      if (_target != 'user') {
+                        _targetUserId = '';
+                      }
+                    });
+                  },
+                ),
+                if (_target == 'user') ...[
+                  const SizedBox(height: 12),
+                  Autocomplete<_FighterOption>(
+                    initialValue: TextEditingValue(text: selectedName ?? ''),
+                    displayStringForOption: (o) => o.label,
+                    optionsBuilder: (value) {
+                      final q = value.text.trim().toLowerCase();
+                      if (q.isEmpty) {
+                        return options;
+                      }
+                      return options.where(
+                        (o) => o.label.toLowerCase().contains(q),
+                      );
+                    },
+                    onSelected: (o) => setState(() => _targetUserId = o.uid),
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onSubmit) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Fighter',
+                          hintText: 'Search fighter',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIcon: _targetUserId.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear',
+                                  onPressed: () {
+                                    controller.clear();
+                                    setState(() => _targetUserId = '');
+                                    focusNode.unfocus();
+                                  },
+                                  icon: const Icon(Icons.clear),
+                                ),
+                        ),
+                        onSubmitted: (_) => onSubmit(),
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return loc.tr('fighters.required');
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _bodyController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Message',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return loc.tr('fighters.required');
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: mutation.isLoading ? null : () => Navigator.pop(context),
+          child: Text(loc.tr('fighters.cancel')),
+        ),
+        FilledButton.icon(
+          onPressed: mutation.isLoading
+              ? null
+              : () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(context);
+
+                  if (!(_formKey.currentState?.validate() ?? false)) {
+                    return;
+                  }
+                  if (_target == 'user' && _targetUserId.trim().isEmpty) {
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('Select a fighter')),
+                    );
+                    return;
+                  }
+                  await ref
+                      .read(adminMessageMutationControllerProvider.notifier)
+                      .send(
+                        title: _titleController.text,
+                        body: _bodyController.text,
+                        target: _target,
+                        targetUserId: _target == 'user' ? _targetUserId : null,
+                      );
+                  final latest =
+                      ref.read(adminMessageMutationControllerProvider);
+                  if (!mounted) return;
+                  if (latest.errorMessage != null) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(latest.errorMessage!)),
+                    );
+                    return;
+                  }
+                  navigator.pop();
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Notification queued')),
+                  );
+                },
+          icon: const Icon(Icons.send),
+          label: Text(mutation.isLoading ? loc.tr('common.loading') : 'Resend'),
+        ),
+      ],
+    );
+  }
 }
 
