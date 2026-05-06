@@ -42,5 +42,30 @@ class NotificationsRepository {
     };
     await _notifications.add(payload);
   }
+
+  Future<void> createScheduleUpdate({
+    required String title,
+    required String body,
+    required String fighterId,
+    required String scheduleId,
+    required String createdBy,
+  }) async {
+    final payload = <String, dynamic>{
+      'type': 'schedule_update',
+      'title': title.trim(),
+      'body': body.trim(),
+      'target': 'user',
+      'targetUserId': fighterId.trim(),
+      'data': <String, String>{
+        'screen': 'whereabouts',
+        'scheduleId': scheduleId,
+      },
+      'status': 'pending',
+      'createdBy': createdBy,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    await _notifications.add(payload);
+  }
 }
 

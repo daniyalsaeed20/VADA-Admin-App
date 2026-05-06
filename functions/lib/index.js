@@ -11,15 +11,13 @@ firebase_admin_1.default.initializeApp();
 const db = firebase_admin_1.default.firestore();
 exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notifications/{notificationId}", async (event) => {
     const snap = event.data;
-    if (!snap) {
+    if (!snap)
         return;
-    }
     const ref = snap.ref;
     const raw = snap.data();
-    if (!raw) {
+    if (!raw)
         return;
-    }
-    if (raw.type !== "admin_message") {
+    if (raw.type !== "admin_message" && raw.type !== "schedule_update") {
         return;
     }
     const title = (raw.title ?? "").trim();
@@ -47,9 +45,8 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         }, { merge: true });
         return true;
     });
-    if (!locked) {
+    if (!locked)
         return;
-    }
     try {
         const userIds = await resolveTargetUserIds({ target, targetUserId });
         if (userIds.length === 0) {
@@ -63,12 +60,10 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         let totalTokens = 0;
         let successCount = 0;
         let failureCount = 0;
-        // Process sequentially to keep logic simple and avoid rate spikes.
         for (const uid of userIds) {
             const tokens = await loadDeviceTokens(uid);
-            if (tokens.length === 0) {
+            if (tokens.length === 0)
                 continue;
-            }
             totalTokens += tokens.length;
             const result = await firebase_admin_1.default.messaging().sendEachForMulticast({
                 tokens,
@@ -77,7 +72,6 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
             });
             successCount += result.successCount;
             failureCount += result.failureCount;
-            // Cleanup invalid tokens.
             await cleanupInvalidTokens(uid, tokens, result.responses);
         }
         await ref.set({
@@ -93,7 +87,7 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         }, { merge: true });
     }
     catch (e) {
-        firebase_functions_1.logger.error("Failed to send admin message notification", e);
+        firebase_functions_1.logger.error("Failed to send notification", e);
         await ref.set({
             status: "failed",
             errorMessage: toErrorMessage(e),
@@ -118,9 +112,8 @@ async function loadDeviceTokens(userId) {
     const tokens = [];
     for (const doc of snap.docs) {
         const token = doc.get("token")?.trim();
-        if (token) {
+        if (token)
             tokens.push(token);
-        }
     }
     return tokens;
 }
@@ -150,8 +143,7 @@ async function cleanupInvalidTokens(userId, tokens, responses) {
     await batch.commit();
 }
 function toErrorMessage(e) {
-    if (e instanceof Error) {
+    if (e instanceof Error)
         return e.message;
-    }
     return String(e);
 }

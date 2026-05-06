@@ -45,6 +45,12 @@ service cloud.firestore {
         allow read: if isAdmin() || isSelf(userId);
         allow create, update, delete: if isSelf(userId);
       }
+
+      // Per-user notification read state (client-managed)
+      match /notificationReads/{notificationId} {
+        allow read, create, update, delete: if request.auth != null
+            && request.auth.uid == userId;
+      }
     }
 
     // Contacts: fighter-owned by fighterId
@@ -82,20 +88,12 @@ service cloud.firestore {
     }
 
     match /notifications/{docId} {
-      // Admin messages + admin monitoring
-      allow read, update, delete: if isAdmin();
+      allow read: if isAdmin()
+          || (isFighter()
+              && (resource.data.target == 'broadcast'
+                  || resource.data.targetUserId == request.auth.uid));
 
-      // Admin can create notification requests (e.g. admin_message)
-      allow create: if isAdmin();
-
-      // Fighter can create certain requests to admin (future modules)
-      allow create: if isFighter()
-          && request.resource.data.sourceUid == request.auth.uid
-          && request.resource.data.targetRole == 'admin'
-          && (request.resource.data.type in [
-            'schedule_change_submission',
-            'schedule_update'
-          ]);
+      allow write: if isAdmin();
     }
 
     match /{document=**} {

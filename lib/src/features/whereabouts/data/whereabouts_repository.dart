@@ -31,7 +31,7 @@ class WhereaboutsRepository {
     });
   }
 
-  Future<void> createWhereabouts({
+  Future<String> createWhereabouts({
     required String fighterId,
     required String date,
     required String startTime,
@@ -42,7 +42,7 @@ class WhereaboutsRepository {
     required String recurrence,
   }) async {
     final now = FieldValue.serverTimestamp();
-    await _schedules.add({
+    final doc = await _schedules.add({
       'fighterId': fighterId.trim(),
       'date': date.trim(),
       'startTime': startTime.trim(),
@@ -54,6 +54,7 @@ class WhereaboutsRepository {
       'createdAt': now,
       'updatedAt': now,
     });
+    return doc.id;
   }
 
   Future<void> updateWhereabouts({

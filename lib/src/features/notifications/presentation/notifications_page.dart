@@ -56,7 +56,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
           SizedBox(height: AppLayout.smallGap(context)),
           Text(
-            'Admin messages (FCM via Cloud Functions)',
+            'Admin messages',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -99,6 +99,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         messagesAsync: messagesAsync,
                         fighterNameById: fighterNameById,
                         fighters: fighters,
+                        embeddedInScrollView: true,
                       ),
                     ],
                   )
@@ -341,11 +342,13 @@ class _HistoryCard extends StatelessWidget {
     required this.messagesAsync,
     required this.fighterNameById,
     required this.fighters,
+    this.embeddedInScrollView = false,
   });
 
   final AsyncValue<List<AdminMessageRequest>> messagesAsync;
   final Map<String, String> fighterNameById;
   final List<Fighter> fighters;
+  final bool embeddedInScrollView;
 
   @override
   Widget build(BuildContext context) {
@@ -360,57 +363,74 @@ class _HistoryCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             SizedBox(height: AppLayout.smallGap(context)),
-            Expanded(
-              child: messagesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text(e.toString())),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return const Center(child: Text('No messages yet'));
-                  }
-                  return ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: AppLayout.smallGap(context)),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final targetLabel = item.target == 'broadcast'
-                          ? 'All fighters'
-                          : (fighterNameById[item.targetUserId] ??
-                              item.targetUserId ??
-                              'Unknown');
-                      return ListTile(
-                        dense: true,
-                        title: Text(item.title),
-                        subtitle: Text(
-                          '${item.body}\nTo: $targetLabel',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        isThreeLine: true,
-                        trailing: Wrap(
-                          spacing: 10,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            IconButton(
-                              tooltip: 'Resend (edit)',
-                              onPressed: () => showDialog<void>(
-                                context: context,
-                                builder: (_) => _ResendAdminMessageDialog(
-                                  original: item,
-                                  fighters: fighters,
-                                ),
-                              ),
-                              icon: const Icon(Icons.replay_outlined),
-                            ),
-                            _StatusChip(status: item.status),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
+            messagesAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
               ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text(e.toString())),
+              ),
+              data: (items) {
+                if (items.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('No messages yet')),
+                  );
+                }
+
+                final list = ListView.separated(
+                  itemCount: items.length,
+                  shrinkWrap: embeddedInScrollView,
+                  physics: embeddedInScrollView
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
+                  separatorBuilder: (_, _) =>
+                      SizedBox(height: AppLayout.smallGap(context)),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final targetLabel = item.target == 'broadcast'
+                        ? 'All fighters'
+                        : (fighterNameById[item.targetUserId] ??
+                            item.targetUserId ??
+                            'Unknown');
+                    return ListTile(
+                      dense: true,
+                      title: Text(item.title),
+                      subtitle: Text(
+                        '${item.body}\nTo: $targetLabel',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      isThreeLine: true,
+                      trailing: Wrap(
+                        spacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          IconButton(
+                            tooltip: 'Resend (edit)',
+                            onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => _ResendAdminMessageDialog(
+                                original: item,
+                                fighters: fighters,
+                              ),
+                            ),
+                            icon: const Icon(Icons.replay_outlined),
+                          ),
+                          _StatusChip(status: item.status),
+                        ],
+                      ),
+                    );
+                  },
+                );
+
+                if (embeddedInScrollView) {
+                  return list;
+                }
+                return Expanded(child: list);
+              },
             ),
           ],
         ),

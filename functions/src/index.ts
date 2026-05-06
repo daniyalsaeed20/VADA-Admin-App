@@ -7,8 +7,8 @@ admin.initializeApp();
 type NotificationTarget = "broadcast" | "user";
 type NotificationStatus = "pending" | "processing" | "sent" | "failed";
 
-type AdminMessageNotification = {
-  type: "admin_message";
+type NotificationRequest = {
+  type: "admin_message" | "schedule_update";
   title: string;
   body: string;
   target: NotificationTarget;
@@ -25,17 +25,13 @@ export const onNotificationCreated = onDocumentCreated(
   "notifications/{notificationId}",
   async (event) => {
     const snap = event.data;
-    if (!snap) {
-      return;
-    }
+    if (!snap) return;
 
     const ref = snap.ref;
-    const raw = snap.data() as Partial<AdminMessageNotification> | undefined;
-    if (!raw) {
-      return;
-    }
+    const raw = snap.data() as Partial<NotificationRequest> | undefined;
+    if (!raw) return;
 
-    if (raw.type !== "admin_message") {
+    if (raw.type !== "admin_message" && raw.type !== "schedule_update") {
       return;
     }
 
@@ -73,9 +69,7 @@ export const onNotificationCreated = onDocumentCreated(
       );
       return true;
     });
-    if (!locked) {
-      return;
-    }
+    if (!locked) return;
 
     try {
       const userIds = await resolveTargetUserIds({ target, targetUserId });
@@ -96,14 +90,11 @@ export const onNotificationCreated = onDocumentCreated(
       let successCount = 0;
       let failureCount = 0;
 
-      // Process sequentially to keep logic simple and avoid rate spikes.
       for (const uid of userIds) {
         const tokens = await loadDeviceTokens(uid);
-        if (tokens.length === 0) {
-          continue;
-        }
-        totalTokens += tokens.length;
+        if (tokens.length === 0) continue;
 
+        totalTokens += tokens.length;
         const result = await admin.messaging().sendEachForMulticast({
           tokens,
           notification: { title, body },
@@ -113,7 +104,6 @@ export const onNotificationCreated = onDocumentCreated(
         successCount += result.successCount;
         failureCount += result.failureCount;
 
-        // Cleanup invalid tokens.
         await cleanupInvalidTokens(uid, tokens, result.responses);
       }
 
@@ -132,7 +122,7 @@ export const onNotificationCreated = onDocumentCreated(
         { merge: true },
       );
     } catch (e) {
-      logger.error("Failed to send admin message notification", e);
+      logger.error("Failed to send notification", e);
       await ref.set(
         {
           status: "failed",
@@ -167,9 +157,7 @@ async function loadDeviceTokens(userId: string): Promise<string[]> {
   const tokens: string[] = [];
   for (const doc of snap.docs) {
     const token = (doc.get("token") as string | undefined)?.trim();
-    if (token) {
-      tokens.push(token);
-    }
+    if (token) tokens.push(token);
   }
   return tokens;
 }
@@ -206,9 +194,7 @@ async function cleanupInvalidTokens(
 }
 
 function toErrorMessage(e: unknown): string {
-  if (e instanceof Error) {
-    return e.message;
-  }
+  if (e instanceof Error) return e.message;
   return String(e);
 }
 

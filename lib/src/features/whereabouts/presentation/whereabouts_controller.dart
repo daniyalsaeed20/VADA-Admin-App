@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
+import '../../../core/constants/firestore_collections.dart';
 import '../data/whereabouts_repository.dart';
 import '../domain/whereabouts_entry.dart';
+import '../../notifications/presentation/notifications_controller.dart';
 
 final whereaboutsRepositoryProvider = Provider<WhereaboutsRepository>((ref) {
   return WhereaboutsRepository(ref.watch(firestoreProvider));
@@ -46,6 +48,88 @@ class WhereaboutsMutationController
 
   final Ref _ref;
 
+  Future<String?> _readDocName({
+    required String collection,
+    required String docId,
+    required String field,
+  }) async {
+    if (docId.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final snap = await _ref
+          .read(firestoreProvider)
+          .collection(collection)
+          .doc(docId.trim())
+          .get();
+      final value = snap.data()?[field];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _queueScheduleUpdateNotification({
+    required String fighterId,
+    required String scheduleId,
+    required String date,
+    required String startTime,
+    required String endTime,
+    required String locationId,
+    required String contactId,
+    required String recurrence,
+    required String notes,
+    required bool isCreate,
+  }) async {
+    final fighterName = await _readDocName(
+          collection: FirestoreCollections.users,
+          docId: fighterId,
+          field: 'fullName',
+        ) ??
+        'Fighter';
+    final locationName = await _readDocName(
+          collection: FirestoreCollections.locations,
+          docId: locationId,
+          field: 'name',
+        ) ??
+        'Location';
+    final contactName = await _readDocName(
+          collection: FirestoreCollections.contacts,
+          docId: contactId,
+          field: 'name',
+        ) ??
+        'Contact';
+
+    final title = isCreate
+        ? 'Schedule created • $fighterName'
+        : 'Schedule updated • $fighterName';
+
+    final notesPreview = notes.trim().isEmpty
+        ? null
+        : (notes.trim().length <= 80
+            ? notes.trim()
+            : '${notes.trim().substring(0, 80)}…');
+    final bodyLines = <String>[
+      '$date • $startTime-$endTime',
+      'Location: $locationName',
+      'Contact: $contactName',
+      'Repeat: ${normalizeRecurrence(recurrence)}',
+      if (notesPreview != null) 'Notes: $notesPreview',
+    ];
+    final body = bodyLines.join('\n');
+
+    await _ref.read(notificationsRepositoryProvider).createScheduleUpdate(
+          title: title,
+          body: body,
+          fighterId: fighterId,
+          scheduleId: scheduleId,
+          createdBy: _ref.read(firebaseAuthProvider).currentUser!.uid,
+        );
+  }
+
   Future<void> create({
     required String fighterId,
     required String date,
@@ -59,7 +143,7 @@ class WhereaboutsMutationController
     state =
         state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
-      await _ref.read(whereaboutsRepositoryProvider).createWhereabouts(
+      final id = await _ref.read(whereaboutsRepositoryProvider).createWhereabouts(
             fighterId: fighterId,
             date: date,
             startTime: startTime,
@@ -69,6 +153,18 @@ class WhereaboutsMutationController
             notes: notes,
             recurrence: recurrence,
           );
+      await _queueScheduleUpdateNotification(
+        fighterId: fighterId,
+        scheduleId: id,
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        locationId: locationId,
+        contactId: contactId,
+        recurrence: recurrence,
+        notes: notes,
+        isCreate: true,
+      );
       state = state.copyWith(
         isLoading: false,
         successMessage: 'whereabouts.createSuccess',
@@ -106,6 +202,18 @@ class WhereaboutsMutationController
             notes: notes,
             recurrence: recurrence,
           );
+      await _queueScheduleUpdateNotification(
+        fighterId: fighterId,
+        scheduleId: id,
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        locationId: locationId,
+        contactId: contactId,
+        recurrence: recurrence,
+        notes: notes,
+        isCreate: false,
+      );
       state = state.copyWith(
         isLoading: false,
         successMessage: 'whereabouts.updateSuccess',
