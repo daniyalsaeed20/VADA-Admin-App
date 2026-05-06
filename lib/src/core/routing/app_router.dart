@@ -10,6 +10,7 @@ import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/fighters/presentation/fighters_page.dart';
 import '../../features/contacts/presentation/contacts_page.dart';
 import '../../features/locations/presentation/locations_page.dart';
+import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/whereabouts/presentation/whereabouts_page.dart';
 import '../../features/shared/presentation/coming_soon_page.dart';
 import '../../features/shell/presentation/admin_shell.dart';
@@ -70,7 +71,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.notifications,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
-              child: const ComingSoonPage(titleKey: 'nav.notifications'),
+              child: const NotificationsPage(),
             ),
           ),
           GoRoute(
