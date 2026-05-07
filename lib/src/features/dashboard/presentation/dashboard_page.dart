@@ -13,6 +13,10 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/brand_theme.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
+import '../../contacts/presentation/contacts_controller.dart';
+import '../../locations/domain/location_record.dart';
+import '../../whereabouts/presentation/whereabouts_controller.dart';
+import '../../locations/presentation/locations_controller.dart';
 
 final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
   final firestore = ref.watch(firestoreProvider);
@@ -23,11 +27,99 @@ final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
   });
 });
 
-class DashboardPage extends ConsumerWidget {
+DateTime? _tryParseYmd(String raw) {
+  final v = raw.trim();
+  if (v.length != 10) return null;
+  final year = int.tryParse(v.substring(0, 4));
+  final month = int.tryParse(v.substring(5, 7));
+  final day = int.tryParse(v.substring(8, 10));
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
+bool _isInNext7DaysInclusive(DateTime day, DateTime today) {
+  final end = today.add(const Duration(days: 7));
+  return !day.isBefore(today) && !day.isAfter(end);
+}
+
+final fighterUpcomingSchedulesCountProvider =
+    Provider.family<int, String>((ref, fighterId) {
+  if (fighterId.trim().isEmpty) return 0;
+  final items = ref.watch(whereaboutsStreamProvider);
+  return items.when(
+    data: (entries) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      var count = 0;
+      for (final e in entries) {
+        if (e.fighterId != fighterId.trim()) continue;
+        final day = _tryParseYmd(e.date);
+        if (day == null) continue;
+        if (_isInNext7DaysInclusive(day, today)) count++;
+      }
+      return count;
+    },
+    loading: () => 0,
+    error: (_, _) => 0,
+  );
+});
+
+final fighterContactsCountFromSchedulesProvider =
+    Provider.family<int, String>((ref, fighterId) {
+  if (fighterId.trim().isEmpty) return 0;
+  final items = ref.watch(whereaboutsStreamProvider);
+  return items.when(
+    data: (entries) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final ids = <String>{};
+      for (final e in entries) {
+        if (e.fighterId != fighterId.trim()) continue;
+        final day = _tryParseYmd(e.date);
+        if (day == null) continue;
+        if (!_isInNext7DaysInclusive(day, today)) continue;
+        final id = e.contactId.trim();
+        if (id.isNotEmpty) ids.add(id);
+      }
+      return ids.length;
+    },
+    loading: () => 0,
+    error: (_, _) => 0,
+  );
+});
+
+final fighterLocationsProvider =
+    StreamProvider.family<List<LocationRecord>, String>((ref, fighterId) {
+  final firestore = ref.watch(firestoreProvider);
+  if (fighterId.trim().isEmpty) {
+    return const Stream.empty();
+  }
+  return firestore
+      .collection(FirestoreCollections.locations)
+      .snapshots()
+      .map((snapshot) {
+    final locations = snapshot.docs
+        .where((doc) => doc.id != FirestoreCollections.metaDoc)
+        .map((doc) => LocationRecord.fromFirestore(doc))
+        .where((loc) => loc.assignedFighterIds.contains(fighterId.trim()))
+        .toList();
+    locations.sort((a, b) => a.name.compareTo(b.name));
+    return locations;
+  });
+});
+
+class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends ConsumerState<DashboardPage> {
+  String _selectedFighterId = '';
+
+  @override
+  Widget build(BuildContext context) {
     final loc = context.l10n;
     final fightersAsync = ref.watch(fightersStreamProvider);
     final contactsAsync =
@@ -221,6 +313,18 @@ class DashboardPage extends ConsumerWidget {
           ),
           SizedBox(height: AppLayout.sectionGap(context)),
           Text(
+            'Fighter overview',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: AppLayout.smallGap(context)),
+          _FighterOverviewCard(
+            fighters: fightersData,
+            selectedFighterId: _selectedFighterId,
+            onSelectedFighterIdChanged: (value) =>
+                setState(() => _selectedFighterId = value),
+          ),
+          SizedBox(height: AppLayout.sectionGap(context)),
+          Text(
             loc.tr('dashboard.visualInsights'),
             style: Theme.of(context).textTheme.titleLarge,
           ),
@@ -314,6 +418,575 @@ class DashboardPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _FighterOverviewCard extends ConsumerWidget {
+  const _FighterOverviewCard({
+    required this.fighters,
+    required this.selectedFighterId,
+    required this.onSelectedFighterIdChanged,
+  });
+
+  final List<Fighter> fighters;
+  final String selectedFighterId;
+  final ValueChanged<String> onSelectedFighterIdChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sorted = fighters.toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
+    String? selectedName;
+    if (selectedFighterId.isNotEmpty) {
+      for (final f in sorted) {
+        if (f.uid == selectedFighterId) {
+          selectedName = f.fullName;
+          break;
+        }
+      }
+    }
+
+    final options = sorted
+        .map((f) => _FighterOption(uid: f.uid, label: f.fullName))
+        .toList();
+
+    final contactsFromSchedulesCount =
+        ref.watch(fighterContactsCountFromSchedulesProvider(selectedFighterId));
+    final upcomingSchedulesCount =
+        ref.watch(fighterUpcomingSchedulesCountProvider(selectedFighterId));
+    final locationsAsync = ref.watch(fighterLocationsProvider(selectedFighterId));
+    final contactsAsync = ref.watch(contactsStreamProvider);
+    final allLocationsAsync = ref.watch(locationsStreamProvider);
+    final whereaboutsAsync = ref.watch(whereaboutsStreamProvider);
+
+    Fighter? selectedFighter;
+    if (selectedFighterId.isNotEmpty) {
+      for (final f in fighters) {
+        if (f.uid == selectedFighterId) {
+          selectedFighter = f;
+          break;
+        }
+      }
+    }
+
+    String initialsFor(String name) {
+      final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+      if (parts.isEmpty) return '?';
+      String firstChar(String s) => s.isEmpty ? '' : s.substring(0, 1);
+      final first = firstChar(parts.first);
+      final second = parts.length > 1 ? firstChar(parts[1]) : '';
+      final value = (first + second).trim();
+      return value.isEmpty ? '?' : value.toUpperCase();
+    }
+
+    String? locationNameForId(String id) {
+      final items = allLocationsAsync.asData?.value;
+      if (items == null) return null;
+      for (final it in items) {
+        if (it.id == id) return it.name;
+      }
+      return null;
+    }
+
+    String? contactNameForId(String id) {
+      final items = contactsAsync.asData?.value;
+      if (items == null) return null;
+      for (final it in items) {
+        if (it.id == id) return it.name;
+      }
+      return null;
+    }
+
+    List<_UpcomingScheduleRow> upcomingPreview() {
+      if (selectedFighterId.isEmpty) return const [];
+      final entries = whereaboutsAsync.asData?.value;
+      if (entries == null) return const [];
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final rows = <_UpcomingScheduleRow>[];
+      for (final e in entries) {
+        if (e.fighterId != selectedFighterId) continue;
+        final day = _tryParseYmd(e.date);
+        if (day == null) continue;
+        if (!_isInNext7DaysInclusive(day, today)) continue;
+        rows.add(
+          _UpcomingScheduleRow(
+            date: e.date,
+            time: '${e.startTime}-${e.endTime}',
+            locationName:
+                locationNameForId(e.locationId) ?? 'Location',
+            contactName: contactNameForId(e.contactId) ?? 'Contact',
+          ),
+        );
+      }
+      rows.sort((a, b) => a.date.compareTo(b.date));
+      return rows.take(3).toList();
+    }
+
+    final previewRows = upcomingPreview();
+
+    final scheme = Theme.of(context).colorScheme;
+    final isNarrow = MediaQuery.sizeOf(context).width < 860;
+
+    Widget selectorRow() {
+      return Row(
+        children: [
+          Expanded(
+            child: Autocomplete<_FighterOption>(
+              initialValue: TextEditingValue(text: selectedName ?? ''),
+              displayStringForOption: (o) => o.label,
+              optionsBuilder: (value) {
+                final q = value.text.trim().toLowerCase();
+                if (q.isEmpty) return options;
+                return options.where((o) => o.label.toLowerCase().contains(q));
+              },
+              onSelected: (o) => onSelectedFighterIdChanged(o.uid),
+              fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    hintText: 'Search fighter',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: selectedFighterId.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear',
+                            onPressed: () {
+                              controller.clear();
+                              onSelectedFighterIdChanged('');
+                              focusNode.unfocus();
+                            },
+                            icon: const Icon(Icons.clear),
+                          ),
+                  ),
+                  onSubmitted: (_) => onSubmit(),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isNarrow) ...[
+              Text('Fighter overview', style: Theme.of(context).textTheme.titleLarge),
+              SizedBox(height: AppLayout.smallGap(context) * 0.6),
+              Text(
+                'Quick snapshot of schedules, contacts and assigned locations.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              SizedBox(height: AppLayout.smallGap(context)),
+              selectorRow(),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Fighter overview',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        SizedBox(height: AppLayout.smallGap(context) * 0.6),
+                        Text(
+                          'Quick snapshot of schedules, contacts and assigned locations.',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: AppLayout.smallGap(context)),
+                  SizedBox(width: 460, child: selectorRow()),
+                ],
+              ),
+            ],
+            SizedBox(height: AppLayout.mediumGap(context)),
+            if (selectedFighterId.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.person_search_outlined, color: scheme.onSurfaceVariant),
+                    SizedBox(width: AppLayout.smallGap(context)),
+                    Expanded(
+                      child: Text(
+                        'Choose a fighter to see their upcoming schedules, contacts and locations.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: scheme.surfaceContainerHighest,
+                  child: Text(
+                    initialsFor(selectedFighter?.fullName ?? selectedName ?? ''),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                title: Text(
+                  selectedFighter?.fullName ?? (selectedName ?? 'Fighter'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: selectedFighter == null
+                    ? null
+                    : Text(
+                        selectedFighter.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                trailing: Chip(
+                  label: Text(
+                    selectedFighter != null && selectedFighter.disabled ? 'Disabled' : 'Active',
+                  ),
+                ),
+              ),
+              Divider(height: AppLayout.mediumGap(context)),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final crossAxisCount = constraints.maxWidth >= 980 ? 3 : 1;
+                  final tiles = [
+                    _OverviewStatCard(
+                      title: 'Schedules (next 7 days)',
+                      value: '$upcomingSchedulesCount',
+                      icon: Icons.calendar_month_outlined,
+                      onTap: () => context.go(AppRoutes.whereabouts),
+                    ),
+                    _OverviewStatCard(
+                      title: 'Contacts (from schedules)',
+                      value: '$contactsFromSchedulesCount',
+                      icon: Icons.contact_phone_outlined,
+                      onTap: () => context.go(AppRoutes.contacts),
+                    ),
+                    _OverviewStatCard(
+                      title: 'Assigned locations',
+                      value: locationsAsync.when(
+                        data: (items) => '${items.length}',
+                        loading: () => context.l10n.tr('common.loading'),
+                        error: (_, _) => '0',
+                      ),
+                      icon: Icons.location_on_outlined,
+                      onTap: () => context.go(AppRoutes.locations),
+                    ),
+                  ];
+                  return GridView.count(
+                    crossAxisCount: crossAxisCount,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: crossAxisCount == 1 ? 4.8 : 3.6,
+                    children: tiles,
+                  );
+                },
+              ),
+              SizedBox(height: AppLayout.mediumGap(context)),
+              _UpcomingSchedulesPreview(rows: previewRows),
+              SizedBox(height: AppLayout.mediumGap(context)),
+              _AssignedLocationsPreview(locationsAsync: locationsAsync),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UpcomingScheduleRow {
+  const _UpcomingScheduleRow({
+    required this.date,
+    required this.time,
+    required this.locationName,
+    required this.contactName,
+  });
+
+  final String date;
+  final String time;
+  final String locationName;
+  final String contactName;
+}
+
+class _UpcomingSchedulesPreview extends StatelessWidget {
+  const _UpcomingSchedulesPreview({required this.rows});
+
+  final List<_UpcomingScheduleRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        color: scheme.surface,
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(Icons.schedule_outlined, color: scheme.onSurfaceVariant),
+            title: const Text('Upcoming (next 7 days)'),
+            subtitle: Text(
+              rows.isEmpty ? 'No schedules found.' : 'Next ${rows.length} entries',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            trailing: TextButton(
+              onPressed: () => context.go(AppRoutes.whereabouts),
+              child: const Text('View all'),
+            ),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: AppLayout.cardPadding(context),
+              vertical: 2,
+            ),
+          ),
+          const Divider(height: 1),
+          if (rows.isEmpty)
+            Padding(
+              padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'No schedules in the next 7 days.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rows.length,
+              separatorBuilder: (context, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final r = rows[index];
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: AppLayout.cardPadding(context),
+                    vertical: 0,
+                  ),
+                  leading: SizedBox(
+                    width: 86,
+                    child: Text(
+                      r.date,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  title: Text(
+                    r.locationName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${r.time} • ${r.contactName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                  onTap: () => context.go(AppRoutes.whereabouts),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssignedLocationsPreview extends StatelessWidget {
+  const _AssignedLocationsPreview({required this.locationsAsync});
+
+  final AsyncValue<List<LocationRecord>> locationsAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return locationsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        final preview = items.take(8).toList();
+        final remaining = items.length - preview.length;
+
+        IconData iconForType(String raw) {
+          switch (raw.trim().toLowerCase()) {
+            case 'gym':
+              return Icons.fitness_center_outlined;
+            case 'hotel':
+              return Icons.hotel_outlined;
+            case 'arena':
+              return Icons.stadium_outlined;
+            case 'airport':
+              return Icons.flight_outlined;
+            default:
+              return Icons.place_outlined;
+          }
+        }
+
+        Widget chipFor(LocationRecord item) {
+          final address = item.address.trim();
+          final tooltip = address.isEmpty ? item.name : '${item.name}\n$address';
+          return Tooltip(
+            message: tooltip,
+            waitDuration: const Duration(milliseconds: 450),
+            child: InputChip(
+              avatar: Icon(
+                iconForType(item.type),
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
+              label: Text(
+                item.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+              labelStyle: Theme.of(context).textTheme.bodyMedium,
+              visualDensity: VisualDensity.compact,
+              side: BorderSide(color: AppColors.border),
+              backgroundColor: scheme.surface,
+              onPressed: () => context.go(AppRoutes.locations),
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+            color: Theme.of(context).colorScheme.surface,
+          ),
+          padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.place_outlined, color: scheme.onSurfaceVariant),
+                  SizedBox(width: AppLayout.smallGap(context)),
+                  Expanded(
+                    child: Text(
+                      'Assigned locations',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${items.length}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+              SizedBox(height: AppLayout.smallGap(context)),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  ...preview.map(chipFor),
+                  if (remaining > 0)
+                    ActionChip(
+                      label: Text('+$remaining more'),
+                      onPressed: () => context.go(AppRoutes.locations),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _OverviewStatCard extends StatelessWidget {
+  const _OverviewStatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+          color: Theme.of(context).colorScheme.surface,
+        ),
+        padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+        child: Row(
+          children: [
+            Icon(icon, color: BrandTheme.vadaRed),
+            SizedBox(width: AppLayout.smallGap(context)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: AppLayout.smallGap(context) * 0.6),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FighterOption {
+  const _FighterOption({required this.uid, required this.label});
+
+  final String uid;
+  final String label;
 }
 
 class _KpiItem {
