@@ -27,7 +27,6 @@ class BootstrapService {
       FirestoreCollections.notifications,
       FirestoreCollections.scheduleRequests,
       FirestoreCollections.settings,
-      FirestoreCollections.adminMessageTemplates,
     ];
 
     for (final collection in collections) {

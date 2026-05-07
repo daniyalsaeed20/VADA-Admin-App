@@ -8,8 +8,6 @@ import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../domain/admin_message_request.dart';
-import '../domain/admin_message_template.dart';
-import 'admin_message_templates_controller.dart';
 import 'notifications_controller.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -28,7 +26,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   String _target = 'broadcast'; // broadcast | user
   String _targetUserId = '';
   _ActiveComposerField _activeField = _ActiveComposerField.none;
-  String _selectedTemplateId = '';
 
   @override
   void dispose() {
@@ -89,9 +86,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final fightersAsync = ref.watch(fightersStreamProvider);
     final mutation = ref.watch(adminMessageMutationControllerProvider);
     final messagesAsync = ref.watch(adminMessagesStreamProvider);
-    final templatesAsync = ref.watch(adminMessageTemplatesStreamProvider);
-    final templatesMutation =
-        ref.watch(adminMessageTemplateMutationControllerProvider);
 
     final fighters = fightersAsync.asData?.value ?? const <Fighter>[];
     final fighterNameById = {
@@ -136,11 +130,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         onActiveFieldChanged: _setActiveField,
                         onInsertPlaceholder: _insertPlaceholder,
                         onCopyPlaceholder: _copyPlaceholder,
-                        templatesAsync: templatesAsync,
-                        templatesMutation: templatesMutation,
-                        selectedTemplateId: _selectedTemplateId,
-                        onSelectedTemplateIdChanged: (value) =>
-                            setState(() => _selectedTemplateId = value),
                         target: _target,
                         onTargetChanged: (value) {
                           setState(() {
@@ -184,11 +173,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                           onActiveFieldChanged: _setActiveField,
                           onInsertPlaceholder: _insertPlaceholder,
                           onCopyPlaceholder: _copyPlaceholder,
-                          templatesAsync: templatesAsync,
-                          templatesMutation: templatesMutation,
-                          selectedTemplateId: _selectedTemplateId,
-                          onSelectedTemplateIdChanged: (value) =>
-                              setState(() => _selectedTemplateId = value),
                           target: _target,
                           onTargetChanged: (value) {
                             setState(() {
@@ -290,10 +274,6 @@ class _ComposerCard extends StatelessWidget {
     required this.onActiveFieldChanged,
     required this.onInsertPlaceholder,
     required this.onCopyPlaceholder,
-    required this.templatesAsync,
-    required this.templatesMutation,
-    required this.selectedTemplateId,
-    required this.onSelectedTemplateIdChanged,
     required this.target,
     required this.onTargetChanged,
     required this.fighters,
@@ -312,10 +292,6 @@ class _ComposerCard extends StatelessWidget {
   final ValueChanged<_ActiveComposerField> onActiveFieldChanged;
   final ValueChanged<String> onInsertPlaceholder;
   final ValueChanged<String> onCopyPlaceholder;
-  final AsyncValue<List<AdminMessageTemplate>> templatesAsync;
-  final AdminMessageTemplateMutationState templatesMutation;
-  final String selectedTemplateId;
-  final ValueChanged<String> onSelectedTemplateIdChanged;
   final String target;
   final ValueChanged<String> onTargetChanged;
   final List<Fighter> fighters;
@@ -355,19 +331,6 @@ class _ComposerCard extends StatelessWidget {
               Text(
                 'Compose',
                 style: Theme.of(context).textTheme.titleMedium,
-              ),
-              SizedBox(height: AppLayout.smallGap(context)),
-              _AdminMessageTemplatesRow(
-                templatesAsync: templatesAsync,
-                templatesMutation: templatesMutation,
-                currentTitle: titleController.text,
-                currentBody: bodyController.text,
-                selectedTemplateId: selectedTemplateId,
-                onSelectedTemplateIdChanged: onSelectedTemplateIdChanged,
-                onApply: (t) {
-                  titleController.text = t.title;
-                  bodyController.text = t.body;
-                },
               ),
               SizedBox(height: AppLayout.smallGap(context)),
               _ComposerPlaceholdersBar(
@@ -550,121 +513,6 @@ class _ComposerPlaceholdersBar extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AdminMessageTemplatesRow extends ConsumerWidget {
-  const _AdminMessageTemplatesRow({
-    required this.templatesAsync,
-    required this.templatesMutation,
-    required this.currentTitle,
-    required this.currentBody,
-    required this.selectedTemplateId,
-    required this.onSelectedTemplateIdChanged,
-    required this.onApply,
-  });
-
-  final AsyncValue<List<AdminMessageTemplate>> templatesAsync;
-  final AdminMessageTemplateMutationState templatesMutation;
-  final String currentTitle;
-  final String currentBody;
-  final String selectedTemplateId;
-  final ValueChanged<String> onSelectedTemplateIdChanged;
-  final ValueChanged<AdminMessageTemplate> onApply;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final items = templatesAsync.asData?.value ?? const <AdminMessageTemplate>[];
-    AdminMessageTemplate? selected;
-    if (selectedTemplateId.trim().isNotEmpty) {
-      for (final it in items) {
-        if (it.id == selectedTemplateId.trim()) {
-          selected = it;
-          break;
-        }
-      }
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue: selected?.id ?? selectedTemplateId,
-            decoration: const InputDecoration(
-              labelText: 'Template',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: [
-              const DropdownMenuItem(
-                value: '',
-                child: Text('None'),
-              ),
-              ...items.map(
-                (t) => DropdownMenuItem(
-                  value: t.id,
-                  child: Text(t.name.isEmpty ? '(unnamed)' : t.name),
-                ),
-              ),
-            ],
-            onChanged: (id) {
-              onSelectedTemplateIdChanged(id ?? '');
-              if (id == null || id.trim().isEmpty) return;
-              AdminMessageTemplate? t;
-              for (final it in items) {
-                if (it.id == id) {
-                  t = it;
-                  break;
-                }
-              }
-              if (t != null) onApply(t);
-            },
-          ),
-        ),
-        SizedBox(width: AppLayout.smallGap(context)),
-        FilledButton.tonalIcon(
-          onPressed: templatesMutation.isLoading
-              ? null
-              : () async {
-                  final nameCtrl = TextEditingController();
-                  final res = await showDialog<String>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('Save as template'),
-                      content: TextField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Template name',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () =>
-                              Navigator.pop(context, nameCtrl.text.trim()),
-                          child: const Text('Save'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (res == null || res.trim().isEmpty) return;
-                  await ref
-                      .read(adminMessageTemplateMutationControllerProvider.notifier)
-                      .create(
-                        name: res.trim(),
-                        title: currentTitle,
-                        body: currentBody,
-                      );
-                },
-          icon: const Icon(Icons.bookmark_add_outlined),
-          label: const Text('Save'),
-        ),
-      ],
     );
   }
 }

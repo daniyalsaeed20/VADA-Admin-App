@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_routes.dart';
 import '../../../core/firebase/firebase_providers.dart';
-import '../../../core/localization/app_localizations.dart';
-import '../../../core/localization/locale_controller.dart';
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
-import '../../auth/presentation/auth_controller.dart';
 import '../domain/notification_settings.dart';
 import 'notification_settings_controller.dart';
 
@@ -21,11 +17,26 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  static const _defaultScheduleUpdateTitleTemplate =
+      'Schedule updated • {fighterName}';
+  static const _defaultScheduleUpdateBodyTemplate = '{date} • {startTime}-{endTime}\n'
+      'Location: {locationName}\n'
+      'Contact: {contactName}\n'
+      'Repeat: (auto)\n'
+      '{notes}';
+
   final _schedTitleCtrl = TextEditingController();
   final _schedBodyCtrl = TextEditingController();
 
   final _schedTitleFocus = FocusNode();
   final _schedBodyFocus = FocusNode();
+
+  final _currentPasswordCtrl = TextEditingController();
+  final _newPasswordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
+  bool _isPasswordSaving = false;
+  String? _passwordError;
+  String? _passwordSuccess;
 
   bool _initialized = false;
   bool _enableAdminMessages = true;
@@ -38,6 +49,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _schedBodyCtrl.dispose();
     _schedTitleFocus.dispose();
     _schedBodyFocus.dispose();
+    _currentPasswordCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -77,6 +91,76 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() {});
   }
 
+  void _useDefaultScheduleTitleTemplate() {
+    _schedTitleCtrl.text = _defaultScheduleUpdateTitleTemplate;
+    _schedTitleCtrl.selection = TextSelection.collapsed(
+      offset: _schedTitleCtrl.text.length,
+    );
+    _setActiveField(_ActiveScheduleField.scheduleTitle);
+    _schedTitleFocus.requestFocus();
+    setState(() {});
+  }
+
+  void _useDefaultScheduleBodyTemplate() {
+    _schedBodyCtrl.text = _defaultScheduleUpdateBodyTemplate;
+    _schedBodyCtrl.selection = TextSelection.collapsed(
+      offset: _schedBodyCtrl.text.length,
+    );
+    _setActiveField(_ActiveScheduleField.scheduleBody);
+    _schedBodyFocus.requestFocus();
+    setState(() {});
+  }
+
+  Future<void> _changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    setState(() {
+      _passwordError = null;
+      _passwordSuccess = null;
+    });
+
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user == null) {
+      setState(() => _passwordError = 'Not signed in.');
+      return;
+    }
+    final email = user.email;
+    if (email == null || email.trim().isEmpty) {
+      setState(() => _passwordError = 'This account has no email address.');
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      setState(() => _passwordError = 'New password and confirmation do not match.');
+      return;
+    }
+    if (newPassword.trim().length < 8) {
+      setState(() => _passwordError = 'Password must be at least 8 characters.');
+      return;
+    }
+
+    setState(() => _isPasswordSaving = true);
+    try {
+      final credential =
+          EmailAuthProvider.credential(email: email, password: currentPassword);
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+      setState(() {
+        _passwordSuccess = 'Password updated';
+        _currentPasswordCtrl.clear();
+        _newPasswordCtrl.clear();
+        _confirmPasswordCtrl.clear();
+      });
+    } on FirebaseAuthException catch (e) {
+      setState(() => _passwordError = e.message ?? e.code);
+    } catch (e) {
+      setState(() => _passwordError = e.toString());
+    } finally {
+      if (mounted) setState(() => _isPasswordSaving = false);
+    }
+  }
+
   Future<void> _copyPlaceholder(BuildContext context, String token) async {
     await Clipboard.setData(ClipboardData(text: token));
     if (!context.mounted) return;
@@ -88,7 +172,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final loc = context.l10n;
-    final locale = ref.watch(localeControllerProvider);
     final auth = ref.watch(firebaseAuthProvider);
     final user = auth.currentUser;
     final settingsAsync = ref.watch(notificationSettingsStreamProvider);
@@ -115,6 +198,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 loc.tr('nav.settings'),
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
+              SizedBox(height: AppLayout.smallGap(context)),
+              Text(
+                'Admin & Notifications',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
               SizedBox(height: AppLayout.sectionGap(context)),
               Card(
                 child: Padding(
@@ -123,14 +213,122 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Notifications',
+                        loc.tr('settings.adminProfile'),
                         style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.admin_panel_settings_outlined),
+                        title: Text(user?.email ?? '—'),
+                        subtitle: Text('UID: ${user?.uid ?? '—'}'),
+                      ),
+                      const Divider(height: 24),
+                      Text(
+                        'Security',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      TextField(
+                        controller: _currentPasswordCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Current password',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      TextField(
+                        controller: _newPasswordCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'New password',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      TextField(
+                        controller: _confirmPasswordCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Confirm new password',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      Row(
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _isPasswordSaving
+                                ? null
+                                : () => _changePassword(
+                                      currentPassword:
+                                          _currentPasswordCtrl.text.trim(),
+                                      newPassword: _newPasswordCtrl.text,
+                                      confirmPassword:
+                                          _confirmPasswordCtrl.text,
+                                    ),
+                            icon: _isPasswordSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child:
+                                        CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.lock_reset_outlined),
+                            label: Text(
+                              _isPasswordSaving ? 'Updating...' : 'Update password',
+                            ),
+                          ),
+                          if (_passwordSuccess != null) ...[
+                            SizedBox(width: AppLayout.smallGap(context)),
+                            Text(_passwordSuccess!),
+                          ],
+                        ],
+                      ),
+                      if (_passwordError != null) ...[
+                        SizedBox(height: AppLayout.smallGap(context)),
+                        Text(
+                          _passwordError!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: AppLayout.mediumGap(context)),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Notifications',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          if (mutation.isSaving)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
                       ),
                       SizedBox(height: AppLayout.smallGap(context)),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Enable admin messages'),
-                        subtitle: const Text('Allows queuing admin_message notifications.'),
+                        subtitle:
+                            const Text('Allows queuing admin_message notifications.'),
                         value: _enableAdminMessages,
                         onChanged: (v) => setState(() => _enableAdminMessages = v),
                       ),
@@ -161,11 +359,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         focusNode: _schedTitleFocus,
                         onTap: () =>
                             _setActiveField(_ActiveScheduleField.scheduleTitle),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Schedule update title template',
                           helperText:
                               'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName}',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: TextButton(
+                              onPressed: _useDefaultScheduleTitleTemplate,
+                              child: const Text('Use default'),
+                            ),
+                          ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minHeight: 40,
+                            minWidth: 110,
+                          ),
                         ),
                       ),
                       SizedBox(height: AppLayout.smallGap(context)),
@@ -176,11 +385,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             _setActiveField(_ActiveScheduleField.scheduleBody),
                         minLines: 3,
                         maxLines: 6,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Schedule update body template',
                           helperText:
                               'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName} {notes}',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: TextButton(
+                              onPressed: _useDefaultScheduleBodyTemplate,
+                              child: const Text('Use default'),
+                            ),
+                          ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minHeight: 40,
+                            minWidth: 110,
+                          ),
                         ),
                       ),
                       SizedBox(height: AppLayout.mediumGap(context)),
@@ -190,23 +410,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             onPressed: mutation.isSaving
                                 ? null
                                 : () async {
-                                    final next = NotificationSettings.defaults().copyWith(
+                                    final next =
+                                        NotificationSettings.defaults().copyWith(
                                       enableAdminMessages: _enableAdminMessages,
                                       enableScheduleUpdates: _enableScheduleUpdates,
-                                      scheduleUpdateTitleTemplate: _schedTitleCtrl.text,
+                                      scheduleUpdateTitleTemplate:
+                                          _schedTitleCtrl.text,
                                       scheduleUpdateBodyTemplate: _schedBodyCtrl.text,
                                     );
                                     await ref
-                                        .read(notificationSettingsMutationControllerProvider.notifier)
+                                        .read(
+                                          notificationSettingsMutationControllerProvider
+                                              .notifier,
+                                        )
                                         .save(next);
                                   },
-                            icon: mutation.isSaving
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.save_outlined),
+                            icon: const Icon(Icons.save_outlined),
                             label: Text(mutation.isSaving ? 'Saving...' : 'Save'),
                           ),
                           SizedBox(width: AppLayout.smallGap(context)),
@@ -224,110 +443,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
-                                    ?.copyWith(color: Theme.of(context).colorScheme.error),
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.error,
+                                    ),
                               ),
                             ),
                         ],
                       ),
                       if (settingsAsync.isLoading)
                         Padding(
-                          padding: EdgeInsets.only(top: AppLayout.smallGap(context)),
+                          padding:
+                              EdgeInsets.only(top: AppLayout.smallGap(context)),
                           child: Text(
                             loc.tr('common.loading'),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: AppLayout.mediumGap(context)),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(AppLayout.cardPadding(context)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loc.tr('settings.language'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      DropdownButtonFormField<Locale>(
-                        initialValue: locale,
-                        decoration: InputDecoration(
-                          labelText: loc.tr('nav.language'),
-                          border: const OutlineInputBorder(),
-                        ),
-                        items: AppLocalizations.supportedLocales
-                            .map(
-                              (l) => DropdownMenuItem(
-                                value: l,
-                                child: Text(l.languageCode.toUpperCase()),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (next) {
-                          if (next != null) {
-                            ref.read(localeControllerProvider.notifier).setLocale(next);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: AppLayout.mediumGap(context)),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(AppLayout.cardPadding(context)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loc.tr('settings.adminProfile'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.admin_panel_settings_outlined),
-                        title: Text(user?.email ?? '—'),
-                        subtitle: Text('UID: ${user?.uid ?? '—'}'),
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: FilledButton.icon(
-                          onPressed: () async {
-                            await ref.read(authRepositoryProvider).logout();
-                            if (context.mounted) context.go(AppRoutes.login);
-                          },
-                          icon: const Icon(Icons.logout),
-                          label: Text(loc.tr('auth.signOut')),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: AppLayout.mediumGap(context)),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(AppLayout.cardPadding(context)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loc.tr('settings.appInfo'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.info_outline),
-                        title: const Text('VADA Admin'),
-                        subtitle: Text(loc.tr('settings.appInfoSubtitle')),
-                      ),
                     ],
                   ),
                 ),
