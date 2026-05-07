@@ -93,6 +93,64 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         .add(const Duration(days: 7)),
   );
 
+  static const _filtersKey = 'reports.filters.v1';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedFilters();
+  }
+
+  Future<void> _loadCachedFilters() async {
+    final store = ref.read(keyValueStoreProvider);
+    final raw = await store.getString(_filtersKey);
+    if (!mounted) return;
+    if (raw == null || raw.trim().isEmpty) {
+      return;
+    }
+    try {
+      final parts = raw.split('|');
+      if (parts.length < 8) {
+        return;
+      }
+      final tab = int.tryParse(parts[0]) ?? 0;
+      final fighterId = parts[1];
+      final sY = int.tryParse(parts[2]) ?? _range.start.year;
+      final sM = int.tryParse(parts[3]) ?? _range.start.month;
+      final sD = int.tryParse(parts[4]) ?? _range.start.day;
+      final eY = int.tryParse(parts[5]) ?? _range.end.year;
+      final eM = int.tryParse(parts[6]) ?? _range.end.month;
+      final eD = int.tryParse(parts[7]) ?? _range.end.day;
+
+      setState(() {
+        _tab = tab.clamp(0, 1);
+        _fighterId = fighterId;
+        _range = DateTimeRange(
+          start: DateTime(sY, sM, sD),
+          end: DateTime(eY, eM, eD),
+        );
+      });
+    } catch (_) {
+    }
+  }
+
+  Future<void> _saveCachedFilters() async {
+    final store = ref.read(keyValueStoreProvider);
+    final s = _range.start;
+    final e = _range.end;
+    final raw = [
+      '$_tab',
+      _fighterId,
+      '${s.year}',
+      '${s.month}',
+      '${s.day}',
+      '${e.year}',
+      '${e.month}',
+      '${e.day}',
+    ].join('|');
+    await store.setString(_filtersKey, raw);
+  }
+
   bool _inRange(DateTime day, DateTimeRange range) {
     final start = DateTime(range.start.year, range.start.month, range.start.day);
     final end = DateTime(range.end.year, range.end.month, range.end.day);
@@ -181,7 +239,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           if (q.isEmpty) return fighterOptions;
           return fighterOptions.where((f) => f.fullName.toLowerCase().contains(q));
         },
-        onSelected: (f) => setState(() => _fighterId = f.uid),
+        onSelected: (f) async {
+          setState(() => _fighterId = f.uid);
+          await _saveCachedFilters();
+        },
         fieldViewBuilder: (context, controller, focusNode, onSubmit) {
           return TextField(
             controller: controller,
@@ -199,6 +260,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                         controller.clear();
                         setState(() => _fighterId = '');
                         focusNode.unfocus();
+                        _saveCachedFilters();
                       },
                       icon: const Icon(Icons.clear),
                     ),
@@ -225,6 +287,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           );
           if (next != null) {
             setState(() => _range = next);
+            await _saveCachedFilters();
           }
         },
         icon: const Icon(Icons.date_range_outlined),
@@ -292,7 +355,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           ButtonSegment(value: 1, label: Text(loc.tr('reports.notificationsTab'))),
         ],
         selected: {_tab},
-        onSelectionChanged: (s) => setState(() => _tab = s.first),
+        onSelectionChanged: (s) async {
+          setState(() => _tab = s.first);
+          await _saveCachedFilters();
+        },
       );
     }
 

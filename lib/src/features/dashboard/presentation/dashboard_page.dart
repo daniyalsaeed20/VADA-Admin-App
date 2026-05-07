@@ -11,11 +11,13 @@ import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/brand_theme.dart';
+import 'global_insights_cache_controller.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../../contacts/presentation/contacts_controller.dart';
 import '../../locations/domain/location_record.dart';
 import '../../whereabouts/presentation/whereabouts_controller.dart';
+import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../../locations/presentation/locations_controller.dart';
 import '../../notifications/domain/admin_message_request.dart';
 
@@ -61,6 +63,30 @@ bool _isInNext7DaysInclusive(DateTime day, DateTime today) {
 
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
+
+int _computeSchedulesToday(List<WhereaboutsEntry> entries) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  var count = 0;
+  for (final e in entries) {
+    final day = _tryParseYmd(e.date);
+    if (day == null) continue;
+    if (_isSameDay(day, today)) count++;
+  }
+  return count;
+}
+
+int _computeSchedulesNext7(List<WhereaboutsEntry> entries) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  var count = 0;
+  for (final e in entries) {
+    final day = _tryParseYmd(e.date);
+    if (day == null) continue;
+    if (_isInNext7DaysInclusive(day, today)) count++;
+  }
+  return count;
+}
 
 final globalSchedulesTodayCountProvider = Provider<int>((ref) {
   final items = ref.watch(whereaboutsStreamProvider);
@@ -810,8 +836,21 @@ class _GlobalInsightsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.l10n;
-    final schedulesToday = ref.watch(globalSchedulesTodayCountProvider);
-    final schedulesNext7 = ref.watch(globalSchedulesNext7DaysCountProvider);
+    final whereaboutsAsync = ref.watch(whereaboutsStreamProvider);
+    final cache = ref.watch(globalInsightsCacheControllerProvider);
+    // Ensure cached insights are updated whenever live data changes.
+    ref.watch(globalInsightsCacheSyncProvider);
+
+    final schedulesToday = whereaboutsAsync.when(
+      data: (items) => _computeSchedulesToday(items),
+      loading: () => cache.schedulesToday,
+      error: (_, _) => cache.schedulesToday,
+    );
+    final schedulesNext7 = whereaboutsAsync.when(
+      data: (items) => _computeSchedulesNext7(items),
+      loading: () => cache.schedulesNext7Days,
+      error: (_, _) => cache.schedulesNext7Days,
+    );
     final scheme = Theme.of(context).colorScheme;
 
     final activeRate = totalFighters == 0
@@ -1224,16 +1263,15 @@ class _InsightTile extends StatelessWidget {
                             ),
                       ),
                       const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          value,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
+                      Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.3,
+                              height: 1.05,
+                            ),
                       ),
                       if (showSubtitle) ...[
                         const SizedBox(height: 2),

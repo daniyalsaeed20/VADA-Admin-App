@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
 import 'src/app.dart';
+import 'src/core/cache/shared_prefs_key_value_store.dart';
+import 'src/core/firebase/firebase_providers.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +22,7 @@ class _BootstrapApp extends StatefulWidget {
 
 class _BootstrapAppState extends State<_BootstrapApp> {
   late Future<void> _initialization;
+  late final SharedPrefsKeyValueStore _store;
 
   @override
   void initState() {
@@ -29,7 +33,14 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   Future<void> _initializeFirebase() {
     return Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    );
+    ).then((_) async {
+      // Firestore offline cache for previously loaded data.
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+      );
+
+      _store = await SharedPrefsKeyValueStore.create();
+    });
   }
 
   @override
@@ -38,7 +49,12 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       future: _initialization,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
-          return const ProviderScope(child: VadaAdminApp());
+          return ProviderScope(
+            overrides: [
+              keyValueStoreProvider.overrideWithValue(_store),
+            ],
+            child: const VadaAdminApp(),
+          );
         }
 
         if (snapshot.hasError) {
