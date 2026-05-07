@@ -52,6 +52,12 @@ class AdminShell extends ConsumerWidget {
         label: loc.tr('nav.whereabouts'),
       ),
       _NavItem(
+        route: AppRoutes.scheduleRequests,
+        icon: Icons.swap_horiz_outlined,
+        selectedIcon: Icons.swap_horiz,
+        label: loc.tr('nav.scheduleRequests'),
+      ),
+      _NavItem(
         route: AppRoutes.checkins,
         icon: Icons.gps_fixed_outlined,
         selectedIcon: Icons.gps_fixed,

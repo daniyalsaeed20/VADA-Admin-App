@@ -61,6 +61,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: AppRoutes.scheduleRequests,
+            pageBuilder: (context, state) => _noTransitionPage(
+              state: state,
+              child:
+                  const ComingSoonPage(titleKey: 'nav.scheduleRequests'),
+            ),
+          ),
+          GoRoute(
             path: AppRoutes.checkins,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,

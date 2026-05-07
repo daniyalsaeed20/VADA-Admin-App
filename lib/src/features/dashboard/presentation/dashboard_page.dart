@@ -17,6 +17,7 @@ import '../../contacts/presentation/contacts_controller.dart';
 import '../../locations/domain/location_record.dart';
 import '../../whereabouts/presentation/whereabouts_controller.dart';
 import '../../locations/presentation/locations_controller.dart';
+import '../../notifications/domain/admin_message_request.dart';
 
 final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
   final firestore = ref.watch(firestoreProvider);
@@ -25,6 +26,22 @@ final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
         .where((doc) => doc.id != FirestoreCollections.metaDoc)
         .length;
   });
+});
+
+final recentNotificationsProvider =
+    StreamProvider<List<AdminMessageRequest>>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  return firestore
+      .collection(FirestoreCollections.notifications)
+      .orderBy('createdAt', descending: true)
+      .limit(25)
+      .snapshots()
+      .map(
+        (snap) => snap.docs
+            .where((doc) => doc.id != FirestoreCollections.metaDoc)
+            .map(AdminMessageRequest.fromFirestore)
+            .toList(),
+      );
 });
 
 DateTime? _tryParseYmd(String raw) {
@@ -41,6 +58,47 @@ bool _isInNext7DaysInclusive(DateTime day, DateTime today) {
   final end = today.add(const Duration(days: 7));
   return !day.isBefore(today) && !day.isAfter(end);
 }
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+final globalSchedulesTodayCountProvider = Provider<int>((ref) {
+  final items = ref.watch(whereaboutsStreamProvider);
+  return items.when(
+    data: (entries) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      var count = 0;
+      for (final e in entries) {
+        final day = _tryParseYmd(e.date);
+        if (day == null) continue;
+        if (_isSameDay(day, today)) count++;
+      }
+      return count;
+    },
+    loading: () => 0,
+    error: (_, _) => 0,
+  );
+});
+
+final globalSchedulesNext7DaysCountProvider = Provider<int>((ref) {
+  final items = ref.watch(whereaboutsStreamProvider);
+  return items.when(
+    data: (entries) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      var count = 0;
+      for (final e in entries) {
+        final day = _tryParseYmd(e.date);
+        if (day == null) continue;
+        if (_isInNext7DaysInclusive(day, today)) count++;
+      }
+      return count;
+    },
+    loading: () => 0,
+    error: (_, _) => 0,
+  );
+});
 
 final fighterUpcomingSchedulesCountProvider =
     Provider.family<int, String>((ref, fighterId) {
@@ -313,7 +371,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           ),
           SizedBox(height: AppLayout.sectionGap(context)),
           Text(
-            'Fighter overview',
+            loc.tr('dashboard.fighterOverview'),
             style: Theme.of(context).textTheme.titleLarge,
           ),
           SizedBox(height: AppLayout.smallGap(context)),
@@ -322,6 +380,29 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             selectedFighterId: _selectedFighterId,
             onSelectedFighterIdChanged: (value) =>
                 setState(() => _selectedFighterId = value),
+          ),
+          SizedBox(height: AppLayout.sectionGap(context)),
+          Text(
+            loc.tr('dashboard.globalInsights'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: AppLayout.smallGap(context)),
+          _GlobalInsightsPanel(
+            totalFighters: total,
+            activeFighters: active,
+            disabledFighters: disabled,
+          ),
+          SizedBox(height: AppLayout.sectionGap(context)),
+          Text(
+            loc.tr('dashboard.actionCenter'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: AppLayout.smallGap(context)),
+          _ActionCenterPanel(
+            scheduleRequestsCount: scheduleRequestsAsync.asData?.value ?? 0,
+            scheduleRequestsLoading: scheduleRequestsAsync.isLoading,
+            checkinsCount: checkinsAsync.asData?.value ?? 0,
+            checkinsLoading: checkinsAsync.isLoading,
           ),
           SizedBox(height: AppLayout.sectionGap(context)),
           Text(
@@ -708,6 +789,470 @@ class _FighterOverviewCard extends ConsumerWidget {
               SizedBox(height: AppLayout.mediumGap(context)),
               _AssignedLocationsPreview(locationsAsync: locationsAsync),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlobalInsightsPanel extends ConsumerWidget {
+  const _GlobalInsightsPanel({
+    required this.totalFighters,
+    required this.activeFighters,
+    required this.disabledFighters,
+  });
+
+  final int totalFighters;
+  final int activeFighters;
+  final int disabledFighters;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.l10n;
+    final schedulesToday = ref.watch(globalSchedulesTodayCountProvider);
+    final schedulesNext7 = ref.watch(globalSchedulesNext7DaysCountProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    final activeRate = totalFighters == 0
+        ? 0
+        : ((activeFighters / totalFighters) * 100).round();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 980;
+        final crossAxisCount = isWide ? 4 : 2;
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: isWide ? 2.8 : 2.6,
+          children: [
+            _InsightTile(
+              title: loc.tr('dashboard.schedulesToday'),
+              value: '$schedulesToday',
+              subtitle: loc.tr('dashboard.allFighters'),
+              icon: Icons.today_outlined,
+              tone: scheme.secondary,
+              onTap: () => context.go(AppRoutes.whereabouts),
+            ),
+            _InsightTile(
+              title: loc.tr('dashboard.upcoming7Days'),
+              value: '$schedulesNext7',
+              subtitle: loc.tr('dashboard.allFighters'),
+              icon: Icons.date_range_outlined,
+              tone: scheme.tertiary,
+              onTap: () => context.go(AppRoutes.whereabouts),
+            ),
+            _InsightTile(
+              title: loc.tr('dashboard.activeFightersTile'),
+              value: '$activeFighters',
+              subtitle: loc.tr('dashboard.activeRate')
+                  .replaceAll('{rate}', '$activeRate')
+                  .replaceAll('{total}', '$totalFighters'),
+              icon: Icons.person_outlined,
+              tone: BrandTheme.vadaRed,
+              onTap: () => context.go(AppRoutes.fighters),
+            ),
+            _InsightTile(
+              title: loc.tr('dashboard.inactiveFightersTile'),
+              value: '$disabledFighters',
+              subtitle: totalFighters == 0
+                  ? '—'
+                  : loc.tr('dashboard.inactiveAccounts'),
+              icon: Icons.person_off_outlined,
+              tone: scheme.onSurfaceVariant,
+              onTap: () => context.go(AppRoutes.fighters),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ActionCenterPanel extends ConsumerWidget {
+  const _ActionCenterPanel({
+    required this.scheduleRequestsCount,
+    required this.scheduleRequestsLoading,
+    required this.checkinsCount,
+    required this.checkinsLoading,
+  });
+
+  final int scheduleRequestsCount;
+  final bool scheduleRequestsLoading;
+  final int checkinsCount;
+  final bool checkinsLoading;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.l10n;
+    final scheme = Theme.of(context).colorScheme;
+    final notificationsAsync = ref.watch(recentNotificationsProvider);
+
+    String formatTs(DateTime? dt) {
+      if (dt == null) return '—';
+      final m = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return '${dt.year}-$m-$d $hh:$mm';
+    }
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ActionRow(
+              icon: Icons.swap_horiz_outlined,
+              title: loc.tr('dashboard.scheduleRequestsShort'),
+              subtitle: loc.tr('dashboard.comingSoonModule'),
+              value: scheduleRequestsLoading
+                  ? loc.tr('common.loading')
+                  : '$scheduleRequestsCount',
+              tone: scheme.tertiary,
+              onTap: () => context.go(AppRoutes.scheduleRequests),
+            ),
+            const Divider(height: 18),
+            _ActionRow(
+              icon: Icons.gps_fixed_outlined,
+              title: loc.tr('nav.checkins'),
+              subtitle: loc.tr('dashboard.comingSoonModule'),
+              value: checkinsLoading ? loc.tr('common.loading') : '$checkinsCount',
+              tone: scheme.secondary,
+              onTap: () => context.go(AppRoutes.checkins),
+            ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Icon(Icons.notifications_outlined, color: scheme.onSurfaceVariant),
+                SizedBox(width: AppLayout.smallGap(context)),
+                Expanded(
+                  child: Text(
+                    loc.tr('dashboard.notificationsHealth'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.go(AppRoutes.notifications),
+                  child: Text(loc.tr('common.open')),
+                ),
+              ],
+            ),
+            SizedBox(height: AppLayout.smallGap(context)),
+            notificationsAsync.when(
+              loading: () => Text(
+                context.l10n.tr('common.loading'),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              error: (_, _) => Text(
+                loc.tr('common.loading'),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              data: (items) {
+                var pending = 0;
+                var failed = 0;
+                for (final it in items) {
+                  if (it.status == 'pending' || it.status == 'processing') pending++;
+                  if (it.status == 'failed') failed++;
+                }
+                final headline = Row(
+                  children: [
+                    _MiniPill(
+                      label: loc.tr('common.pending'),
+                      value: '$pending',
+                      fg: scheme.onSurfaceVariant,
+                      bg: scheme.surfaceContainerHighest,
+                    ),
+                    const SizedBox(width: 8),
+                    _MiniPill(
+                      label: loc.tr('common.failed'),
+                      value: '$failed',
+                      fg: scheme.error,
+                      bg: scheme.error.withValues(alpha: 0.10),
+                    ),
+                  ],
+                );
+
+                final attention = items
+                    .where((it) =>
+                        it.status == 'failed' ||
+                        it.status == 'pending' ||
+                        it.status == 'processing')
+                    .take(5)
+                    .toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    headline,
+                    SizedBox(height: AppLayout.smallGap(context)),
+                    if (attention.isEmpty)
+                      Text(
+                        loc.tr('dashboard.noNotificationsAttention'),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: attention.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final it = attention[index];
+                          final type = it.target == 'broadcast'
+                              ? 'Broadcast'
+                              : (it.targetUserId == null || it.targetUserId!.isEmpty
+                                  ? 'User'
+                                  : 'User');
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              it.title.isEmpty ? '(no title)' : it.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${it.status} • ${formatTs(it.createdAt)} • $type',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Icon(
+                              it.status == 'failed'
+                                  ? Icons.error_outline
+                                  : Icons.timelapse_outlined,
+                              color: it.status == 'failed'
+                                  ? scheme.error
+                                  : scheme.onSurfaceVariant,
+                            ),
+                            onTap: () => context.go(AppRoutes.notifications),
+                          );
+                        },
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniPill extends StatelessWidget {
+  const _MiniPill({
+    required this.label,
+    required this.value,
+    required this.fg,
+    required this.bg,
+  });
+
+  final String label;
+  final String value;
+  final Color fg;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $value',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.tone,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String value;
+  final Color tone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: tone, size: 18),
+            ),
+            SizedBox(width: AppLayout.smallGap(context)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InsightTile extends StatelessWidget {
+  const _InsightTile({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.tone,
+    required this.onTap,
+  });
+
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color tone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+          color: scheme.surface,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: tone, size: 18),
+            ),
+            SizedBox(width: AppLayout.smallGap(context)),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // In some tab views the tile height gets very small; avoid
+                  // RenderFlex overflow by hiding the subtitle when needed.
+                  final showSubtitle = constraints.maxHeight.isInfinite
+                      ? true
+                      : constraints.maxHeight >= 76;
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          value,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      if (showSubtitle) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
+            Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
           ],
         ),
       ),

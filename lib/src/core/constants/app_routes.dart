@@ -5,6 +5,7 @@ class AppRoutes {
   static const contacts = '/contacts';
   static const locations = '/locations';
   static const whereabouts = '/whereabouts';
+  static const scheduleRequests = '/schedule-requests';
   static const checkins = '/checkins';
   static const notifications = '/notifications';
   static const reports = '/reports';
