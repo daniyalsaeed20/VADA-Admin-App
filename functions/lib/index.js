@@ -48,8 +48,8 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
     if (!locked)
         return;
     try {
-        const userIds = await resolveTargetUserIds({ target, targetUserId });
-        if (userIds.length === 0) {
+        const targets = await resolveTargetUsers({ target, targetUserId });
+        if (targets.length === 0) {
             await ref.set({
                 status: "failed",
                 errorMessage: target === "user" ? "Target user not found" : "No users matched",
@@ -60,25 +60,33 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         let totalTokens = 0;
         let successCount = 0;
         let failureCount = 0;
-        for (const uid of userIds) {
-            const tokens = await loadDeviceTokens(uid);
+        for (const t of targets) {
+            const tokens = await loadDeviceTokens(t.uid);
             if (tokens.length === 0)
                 continue;
             totalTokens += tokens.length;
+            const personalizedTitle = applyUserPlaceholders(title, {
+                uid: t.uid,
+                fullName: t.fullName,
+            });
+            const personalizedBody = applyUserPlaceholders(body, {
+                uid: t.uid,
+                fullName: t.fullName,
+            });
             const result = await firebase_admin_1.default.messaging().sendEachForMulticast({
                 tokens,
-                notification: { title, body },
+                notification: { title: personalizedTitle, body: personalizedBody },
                 data: raw.data ?? {},
             });
             successCount += result.successCount;
             failureCount += result.failureCount;
-            await cleanupInvalidTokens(uid, tokens, result.responses);
+            await cleanupInvalidTokens(t.uid, tokens, result.responses);
         }
         await ref.set({
             status: "sent",
             sentAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
             result: {
-                users: userIds.length,
+                users: targets.length,
                 tokens: totalTokens,
                 success: successCount,
                 failure: failureCount,
@@ -95,9 +103,16 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         }, { merge: true });
     }
 });
-async function resolveTargetUserIds(input) {
+async function resolveTargetUsers(input) {
     if (input.target === "user") {
-        return input.targetUserId ? [input.targetUserId] : [];
+        if (!input.targetUserId)
+            return [];
+        const snap = await db.collection("users").doc(input.targetUserId).get();
+        if (!snap.exists)
+            return [];
+        const rawName = snap.get("fullName") ?? "";
+        const fullName = rawName.trim() || "Fighter";
+        return [{ uid: snap.id, fullName }];
     }
     // Broadcast: enabled fighters only (role == fighter && disabled == false).
     const snap = await db
@@ -105,7 +120,17 @@ async function resolveTargetUserIds(input) {
         .where("role", "==", "fighter")
         .where("disabled", "==", false)
         .get();
-    return snap.docs.map((d) => d.id);
+    return snap.docs.map((d) => {
+        const rawName = d.get("fullName") ?? "";
+        return {
+            uid: d.id,
+            fullName: rawName.trim() || "Fighter",
+        };
+    });
+}
+function applyUserPlaceholders(input, user) {
+    // Keep this intentionally small and explicit.
+    return input.replaceAll("{fighterName}", user.fullName);
 }
 async function loadDeviceTokens(userId) {
     const snap = await db.collection(`users/${userId}/deviceTokens`).get();

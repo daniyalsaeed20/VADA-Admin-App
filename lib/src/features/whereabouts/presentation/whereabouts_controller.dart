@@ -5,6 +5,7 @@ import '../../../core/constants/firestore_collections.dart';
 import '../data/whereabouts_repository.dart';
 import '../domain/whereabouts_entry.dart';
 import '../../notifications/presentation/notifications_controller.dart';
+import '../../settings/presentation/notification_settings_controller.dart';
 
 final whereaboutsRepositoryProvider = Provider<WhereaboutsRepository>((ref) {
   return WhereaboutsRepository(ref.watch(firestoreProvider));
@@ -84,6 +85,10 @@ class WhereaboutsMutationController
     required String notes,
     required bool isCreate,
   }) async {
+    final notifSettings = _ref.read(notificationSettingsCurrentProvider);
+    if (!notifSettings.enableScheduleUpdates) {
+      return;
+    }
     final fighterName = await _readDocName(
           collection: FirestoreCollections.users,
           docId: fighterId,
@@ -103,7 +108,7 @@ class WhereaboutsMutationController
         ) ??
         'Contact';
 
-    final title = isCreate
+    final defaultTitle = isCreate
         ? 'Schedule created • $fighterName'
         : 'Schedule updated • $fighterName';
 
@@ -119,7 +124,29 @@ class WhereaboutsMutationController
       'Repeat: ${normalizeRecurrence(recurrence)}',
       if (notesPreview != null) 'Notes: $notesPreview',
     ];
-    final body = bodyLines.join('\n');
+    final defaultBody = bodyLines.join('\n');
+
+    String applyTemplate(String template, String fallback) {
+      final t = template.trim();
+      if (t.isEmpty) return fallback;
+      return t
+          .replaceAll('{fighterName}', fighterName)
+          .replaceAll('{date}', date)
+          .replaceAll('{startTime}', startTime)
+          .replaceAll('{endTime}', endTime)
+          .replaceAll('{locationName}', locationName)
+          .replaceAll('{contactName}', contactName)
+          .replaceAll('{notes}', notes.trim());
+    }
+
+    final title = applyTemplate(
+      notifSettings.scheduleUpdateTitleTemplate,
+      defaultTitle,
+    );
+    final body = applyTemplate(
+      notifSettings.scheduleUpdateBodyTemplate,
+      defaultBody,
+    );
 
     await _ref.read(notificationsRepositoryProvider).createScheduleUpdate(
           title: title,

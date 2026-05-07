@@ -6,5 +6,7 @@ class FirestoreCollections {
   static const checkins = 'checkins';
   static const notifications = 'notifications';
   static const scheduleRequests = 'schedule_requests';
+  static const settings = 'settings';
+  static const adminMessageTemplates = 'admin_message_templates';
   static const metaDoc = '_meta';
 }

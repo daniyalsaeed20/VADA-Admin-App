@@ -72,8 +72,8 @@ export const onNotificationCreated = onDocumentCreated(
     if (!locked) return;
 
     try {
-      const userIds = await resolveTargetUserIds({ target, targetUserId });
-      if (userIds.length === 0) {
+      const targets = await resolveTargetUsers({ target, targetUserId });
+      if (targets.length === 0) {
         await ref.set(
           {
             status: "failed",
@@ -90,21 +90,29 @@ export const onNotificationCreated = onDocumentCreated(
       let successCount = 0;
       let failureCount = 0;
 
-      for (const uid of userIds) {
-        const tokens = await loadDeviceTokens(uid);
+      for (const t of targets) {
+        const tokens = await loadDeviceTokens(t.uid);
         if (tokens.length === 0) continue;
 
         totalTokens += tokens.length;
+        const personalizedTitle = applyUserPlaceholders(title, {
+          uid: t.uid,
+          fullName: t.fullName,
+        });
+        const personalizedBody = applyUserPlaceholders(body, {
+          uid: t.uid,
+          fullName: t.fullName,
+        });
         const result = await admin.messaging().sendEachForMulticast({
           tokens,
-          notification: { title, body },
+          notification: { title: personalizedTitle, body: personalizedBody },
           data: raw.data ?? {},
         });
 
         successCount += result.successCount;
         failureCount += result.failureCount;
 
-        await cleanupInvalidTokens(uid, tokens, result.responses);
+        await cleanupInvalidTokens(t.uid, tokens, result.responses);
       }
 
       await ref.set(
@@ -112,7 +120,7 @@ export const onNotificationCreated = onDocumentCreated(
           status: "sent",
           sentAt: admin.firestore.FieldValue.serverTimestamp(),
           result: {
-            users: userIds.length,
+            users: targets.length,
             tokens: totalTokens,
             success: successCount,
             failure: failureCount,
@@ -135,12 +143,19 @@ export const onNotificationCreated = onDocumentCreated(
   },
 );
 
-async function resolveTargetUserIds(input: {
+type TargetUser = { uid: string; fullName: string };
+
+async function resolveTargetUsers(input: {
   target: NotificationTarget;
   targetUserId: string;
-}): Promise<string[]> {
+}): Promise<TargetUser[]> {
   if (input.target === "user") {
-    return input.targetUserId ? [input.targetUserId] : [];
+    if (!input.targetUserId) return [];
+    const snap = await db.collection("users").doc(input.targetUserId).get();
+    if (!snap.exists) return [];
+    const rawName = (snap.get("fullName") as string | undefined) ?? "";
+    const fullName = rawName.trim() || "Fighter";
+    return [{ uid: snap.id, fullName }];
   }
 
   // Broadcast: enabled fighters only (role == fighter && disabled == false).
@@ -149,7 +164,21 @@ async function resolveTargetUserIds(input: {
     .where("role", "==", "fighter")
     .where("disabled", "==", false)
     .get();
-  return snap.docs.map((d) => d.id);
+  return snap.docs.map((d) => {
+    const rawName = (d.get("fullName") as string | undefined) ?? "";
+    return {
+      uid: d.id,
+      fullName: rawName.trim() || "Fighter",
+    };
+  });
+}
+
+function applyUserPlaceholders(
+  input: string,
+  user: { uid: string; fullName: string },
+): string {
+  // Keep this intentionally small and explicit.
+  return input.replaceAll("{fighterName}", user.fullName);
 }
 
 async function loadDeviceTokens(userId: string): Promise<string[]> {

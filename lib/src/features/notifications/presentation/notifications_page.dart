@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_colors.dart';
@@ -7,6 +8,8 @@ import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../domain/admin_message_request.dart';
+import '../domain/admin_message_template.dart';
+import 'admin_message_templates_controller.dart';
 import 'notifications_controller.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -20,14 +23,64 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
+  final _titleFocus = FocusNode();
+  final _bodyFocus = FocusNode();
   String _target = 'broadcast'; // broadcast | user
   String _targetUserId = '';
+  _ActiveComposerField _activeField = _ActiveComposerField.none;
+  String _selectedTemplateId = '';
 
   @override
   void dispose() {
     _titleController.dispose();
     _bodyController.dispose();
+    _titleFocus.dispose();
+    _bodyFocus.dispose();
     super.dispose();
+  }
+
+  void _setActiveField(_ActiveComposerField field) {
+    if (_activeField == field) return;
+    setState(() => _activeField = field);
+  }
+
+  TextEditingController? _activeController() {
+    switch (_activeField) {
+      case _ActiveComposerField.title:
+        return _titleController;
+      case _ActiveComposerField.body:
+        return _bodyController;
+      case _ActiveComposerField.none:
+        return null;
+    }
+  }
+
+  void _insertPlaceholder(String token) {
+    final ctrl = _activeController();
+    if (ctrl == null) return;
+
+    final text = ctrl.text;
+    final sel = ctrl.selection;
+    final start = sel.isValid ? sel.start : text.length;
+    final end = sel.isValid ? sel.end : text.length;
+    final safeStart = (start < 0 || start > text.length) ? text.length : start;
+    final safeEnd = (end < 0 || end > text.length) ? text.length : end;
+
+    final next = text.replaceRange(safeStart, safeEnd, token);
+    ctrl.value = ctrl.value.copyWith(
+      text: next,
+      selection: TextSelection.collapsed(offset: safeStart + token.length),
+      composing: TextRange.empty,
+    );
+    setState(() {});
+  }
+
+  Future<void> _copyPlaceholder(String token) async {
+    await Clipboard.setData(ClipboardData(text: token));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $token')),
+    );
   }
 
   @override
@@ -36,6 +89,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final fightersAsync = ref.watch(fightersStreamProvider);
     final mutation = ref.watch(adminMessageMutationControllerProvider);
     final messagesAsync = ref.watch(adminMessagesStreamProvider);
+    final templatesAsync = ref.watch(adminMessageTemplatesStreamProvider);
+    final templatesMutation =
+        ref.watch(adminMessageTemplateMutationControllerProvider);
 
     final fighters = fightersAsync.asData?.value ?? const <Fighter>[];
     final fighterNameById = {
@@ -74,6 +130,17 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         formKey: _formKey,
                         titleController: _titleController,
                         bodyController: _bodyController,
+                        titleFocus: _titleFocus,
+                        bodyFocus: _bodyFocus,
+                        activeField: _activeField,
+                        onActiveFieldChanged: _setActiveField,
+                        onInsertPlaceholder: _insertPlaceholder,
+                        onCopyPlaceholder: _copyPlaceholder,
+                        templatesAsync: templatesAsync,
+                        templatesMutation: templatesMutation,
+                        selectedTemplateId: _selectedTemplateId,
+                        onSelectedTemplateIdChanged: (value) =>
+                            setState(() => _selectedTemplateId = value),
                         target: _target,
                         onTargetChanged: (value) {
                           setState(() {
@@ -111,6 +178,17 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                           formKey: _formKey,
                           titleController: _titleController,
                           bodyController: _bodyController,
+                          titleFocus: _titleFocus,
+                          bodyFocus: _bodyFocus,
+                          activeField: _activeField,
+                          onActiveFieldChanged: _setActiveField,
+                          onInsertPlaceholder: _insertPlaceholder,
+                          onCopyPlaceholder: _copyPlaceholder,
+                          templatesAsync: templatesAsync,
+                          templatesMutation: templatesMutation,
+                          selectedTemplateId: _selectedTemplateId,
+                          onSelectedTemplateIdChanged: (value) =>
+                              setState(() => _selectedTemplateId = value),
                           target: _target,
                           onTargetChanged: (value) {
                             setState(() {
@@ -163,9 +241,29 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       );
       return;
     }
+
+    // Resolve fighter placeholders from the already-loaded fighters list so
+    // messages never reach mobile with "{fighterName}".
+    String resolvedTitle = _titleController.text;
+    String resolvedBody = _bodyController.text;
+    if (target == 'user' && targetUserId.trim().isNotEmpty) {
+      final fighters = ref.read(fightersStreamProvider).asData?.value ?? const <Fighter>[];
+      String? name;
+      for (final f in fighters) {
+        if (f.uid == targetUserId.trim()) {
+          if (f.fullName.trim().isNotEmpty) name = f.fullName.trim();
+          break;
+        }
+      }
+      if (name != null) {
+        resolvedTitle = resolvedTitle.replaceAll('{fighterName}', name);
+        resolvedBody = resolvedBody.replaceAll('{fighterName}', name);
+      }
+    }
+
     await ref.read(adminMessageMutationControllerProvider.notifier).send(
-          title: _titleController.text,
-          body: _bodyController.text,
+          title: resolvedTitle,
+          body: resolvedBody,
           target: target,
           targetUserId: target == 'user' ? targetUserId : null,
         );
@@ -186,6 +284,16 @@ class _ComposerCard extends StatelessWidget {
     required this.formKey,
     required this.titleController,
     required this.bodyController,
+    required this.titleFocus,
+    required this.bodyFocus,
+    required this.activeField,
+    required this.onActiveFieldChanged,
+    required this.onInsertPlaceholder,
+    required this.onCopyPlaceholder,
+    required this.templatesAsync,
+    required this.templatesMutation,
+    required this.selectedTemplateId,
+    required this.onSelectedTemplateIdChanged,
     required this.target,
     required this.onTargetChanged,
     required this.fighters,
@@ -198,6 +306,16 @@ class _ComposerCard extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController titleController;
   final TextEditingController bodyController;
+  final FocusNode titleFocus;
+  final FocusNode bodyFocus;
+  final _ActiveComposerField activeField;
+  final ValueChanged<_ActiveComposerField> onActiveFieldChanged;
+  final ValueChanged<String> onInsertPlaceholder;
+  final ValueChanged<String> onCopyPlaceholder;
+  final AsyncValue<List<AdminMessageTemplate>> templatesAsync;
+  final AdminMessageTemplateMutationState templatesMutation;
+  final String selectedTemplateId;
+  final ValueChanged<String> onSelectedTemplateIdChanged;
   final String target;
   final ValueChanged<String> onTargetChanged;
   final List<Fighter> fighters;
@@ -237,6 +355,26 @@ class _ComposerCard extends StatelessWidget {
               Text(
                 'Compose',
                 style: Theme.of(context).textTheme.titleMedium,
+              ),
+              SizedBox(height: AppLayout.smallGap(context)),
+              _AdminMessageTemplatesRow(
+                templatesAsync: templatesAsync,
+                templatesMutation: templatesMutation,
+                currentTitle: titleController.text,
+                currentBody: bodyController.text,
+                selectedTemplateId: selectedTemplateId,
+                onSelectedTemplateIdChanged: onSelectedTemplateIdChanged,
+                onApply: (t) {
+                  titleController.text = t.title;
+                  bodyController.text = t.body;
+                },
+              ),
+              SizedBox(height: AppLayout.smallGap(context)),
+              _ComposerPlaceholdersBar(
+                target: target,
+                activeField: activeField,
+                onInsert: onInsertPlaceholder,
+                onCopy: onCopyPlaceholder,
               ),
               SizedBox(height: AppLayout.smallGap(context)),
               SegmentedButton<String>(
@@ -291,6 +429,8 @@ class _ComposerCard extends StatelessWidget {
               SizedBox(height: AppLayout.mediumGap(context)),
               TextFormField(
                 controller: titleController,
+                focusNode: titleFocus,
+                onTap: () => onActiveFieldChanged(_ActiveComposerField.title),
                 decoration: InputDecoration(
                   labelText: 'Title',
                   border: const OutlineInputBorder(),
@@ -305,6 +445,8 @@ class _ComposerCard extends StatelessWidget {
               SizedBox(height: AppLayout.smallGap(context)),
               TextFormField(
                 controller: bodyController,
+                focusNode: bodyFocus,
+                onTap: () => onActiveFieldChanged(_ActiveComposerField.body),
                 minLines: 3,
                 maxLines: 6,
                 decoration: InputDecoration(
@@ -333,6 +475,196 @@ class _ComposerCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+enum _ActiveComposerField {
+  none,
+  title,
+  body,
+}
+
+class _ComposerPlaceholdersBar extends StatelessWidget {
+  const _ComposerPlaceholdersBar({
+    required this.target,
+    required this.activeField,
+    required this.onInsert,
+    required this.onCopy,
+  });
+
+  final String target;
+  final _ActiveComposerField activeField;
+  final ValueChanged<String> onInsert;
+  final ValueChanged<String> onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = const ['{fighterName}', '{date}', '{time}', '{datetime}'];
+    final activeLabel = switch (activeField) {
+      _ActiveComposerField.none => 'Click Title or Message, then insert placeholders.',
+      _ActiveComposerField.title => 'Inserting into: Title',
+      _ActiveComposerField.body => 'Inserting into: Message',
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            activeLabel,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: tokens.map((t) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ActionChip(
+                    label: Text(t),
+                    onPressed: activeField == _ActiveComposerField.none
+                        ? null
+                        : () => onInsert(t),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    tooltip: 'Copy',
+                    onPressed: () => onCopy(t),
+                    icon: const Icon(Icons.copy, size: 18),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminMessageTemplatesRow extends ConsumerWidget {
+  const _AdminMessageTemplatesRow({
+    required this.templatesAsync,
+    required this.templatesMutation,
+    required this.currentTitle,
+    required this.currentBody,
+    required this.selectedTemplateId,
+    required this.onSelectedTemplateIdChanged,
+    required this.onApply,
+  });
+
+  final AsyncValue<List<AdminMessageTemplate>> templatesAsync;
+  final AdminMessageTemplateMutationState templatesMutation;
+  final String currentTitle;
+  final String currentBody;
+  final String selectedTemplateId;
+  final ValueChanged<String> onSelectedTemplateIdChanged;
+  final ValueChanged<AdminMessageTemplate> onApply;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = templatesAsync.asData?.value ?? const <AdminMessageTemplate>[];
+    AdminMessageTemplate? selected;
+    if (selectedTemplateId.trim().isNotEmpty) {
+      for (final it in items) {
+        if (it.id == selectedTemplateId.trim()) {
+          selected = it;
+          break;
+        }
+      }
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: selected?.id ?? selectedTemplateId,
+            decoration: const InputDecoration(
+              labelText: 'Template',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem(
+                value: '',
+                child: Text('None'),
+              ),
+              ...items.map(
+                (t) => DropdownMenuItem(
+                  value: t.id,
+                  child: Text(t.name.isEmpty ? '(unnamed)' : t.name),
+                ),
+              ),
+            ],
+            onChanged: (id) {
+              onSelectedTemplateIdChanged(id ?? '');
+              if (id == null || id.trim().isEmpty) return;
+              AdminMessageTemplate? t;
+              for (final it in items) {
+                if (it.id == id) {
+                  t = it;
+                  break;
+                }
+              }
+              if (t != null) onApply(t);
+            },
+          ),
+        ),
+        SizedBox(width: AppLayout.smallGap(context)),
+        FilledButton.tonalIcon(
+          onPressed: templatesMutation.isLoading
+              ? null
+              : () async {
+                  final nameCtrl = TextEditingController();
+                  final res = await showDialog<String>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Save as template'),
+                      content: TextField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Template name',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () =>
+                              Navigator.pop(context, nameCtrl.text.trim()),
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (res == null || res.trim().isEmpty) return;
+                  await ref
+                      .read(adminMessageTemplateMutationControllerProvider.notifier)
+                      .create(
+                        name: res.trim(),
+                        title: currentTitle,
+                        body: currentBody,
+                      );
+                },
+          icon: const Icon(Icons.bookmark_add_outlined),
+          label: const Text('Save'),
+        ),
+      ],
     );
   }
 }

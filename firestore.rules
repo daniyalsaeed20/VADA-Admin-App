@@ -96,6 +96,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /admin_message_templates/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
