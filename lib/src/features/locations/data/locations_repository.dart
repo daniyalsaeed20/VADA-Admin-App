@@ -36,14 +36,14 @@ class LocationsRepository {
     });
   }
 
-  Future<void> createLocation({
+  Future<String> createLocation({
     required String name,
     required String address,
     required String type,
     required List<String> assignedFighterIds,
   }) async {
     final now = FieldValue.serverTimestamp();
-    await _locations.add({
+    final doc = await _locations.add({
       'name': name.trim(),
       'address': address.trim(),
       'type': type.trim().toLowerCase(),
@@ -51,6 +51,47 @@ class LocationsRepository {
       'createdAt': now,
       'updatedAt': now,
     });
+    return doc.id;
+  }
+
+  Future<void> ensureFighterAssignedToLocation({
+    required String locationId,
+    required String fighterId,
+  }) async {
+    final id = locationId.trim();
+    final fighter = fighterId.trim();
+    if (id.isEmpty || fighter.isEmpty) {
+      return;
+    }
+
+    final snap = await _locations.doc(id).get();
+    if (!snap.exists) {
+      return;
+    }
+
+    final data = snap.data() ?? <String, dynamic>{};
+    final current = (data['assignedFighterIds'] as List<dynamic>? ?? [])
+        .whereType<String>()
+        .toList();
+    if (current.contains(fighter)) {
+      return;
+    }
+
+    await _locations.doc(id).set({
+      'assignedFighterIds': [...current, fighter],
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<LocationRecord?> getLocation(String locationId) async {
+    if (locationId.trim().isEmpty) {
+      return null;
+    }
+    final doc = await _locations.doc(locationId.trim()).get();
+    if (!doc.exists) {
+      return null;
+    }
+    return LocationRecord.fromFirestore(doc);
   }
 
   Future<void> updateLocation({

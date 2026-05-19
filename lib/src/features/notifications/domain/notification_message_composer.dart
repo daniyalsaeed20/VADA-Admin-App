@@ -1,4 +1,5 @@
 import '../../../core/notifications/notification_templates.dart';
+import '../../schedule_change_requests/domain/schedule_change_approve_helpers.dart';
 import '../../schedule_change_requests/domain/schedule_change_request.dart';
 import '../../settings/domain/notification_settings.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
@@ -165,8 +166,9 @@ class NotificationMessageComposer {
     required String fighterName,
     required String adminNotes,
     String locationName = '',
+    Map<String, dynamic>? requestedChangesOverride,
   }) {
-    final changes = request.requestedChanges;
+    final changes = requestedChangesOverride ?? request.requestedChanges;
     final snapshot = request.currentSnapshot;
 
     String field(List<String> keys) {
@@ -178,9 +180,13 @@ class NotificationMessageComposer {
     }
 
     final proposed = readScheduleField(changes, const ['proposedLocationText']);
+    final proposedOut = proposed.isNotEmpty
+        ? proposed
+        : readRequestedNewSiteSummary(changes);
+
     final loc = locationName.isNotEmpty
         ? locationName
-        : field(const ['locationName', 'location']);
+        : readRequestedNewSiteName(changes);
 
     return {
       'fighterName': fighterName,
@@ -190,7 +196,8 @@ class NotificationMessageComposer {
       'startTime': field(const ['startTime', 'fromTime']),
       'endTime': field(const ['endTime', 'toTime']),
       'locationName': loc,
-      'proposedLocationText': proposed,
+      'locationAddress': readRequestedNewSiteAddress(changes),
+      'proposedLocationText': proposedOut,
     };
   }
 

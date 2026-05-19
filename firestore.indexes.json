@@ -45,6 +45,92 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "scheduleChangeRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fighterId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduleChangeRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fighterId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduleChangeRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fighterId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduleChangeRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fighterId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduleChangeRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fighterId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

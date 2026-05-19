@@ -91,7 +91,17 @@ class ScheduleChangeRequest {
     return '${text.substring(0, 80)}…';
   }
 
+  /// Requested changes first, then current snapshot, for list/dashboard previews.
+  String get changeSummary => summarizeScheduleChangeFields(
+        requestedChanges,
+        fallbackSnapshot: currentSnapshot,
+      );
+
   String? schedulePreviewFromSnapshot() {
+    final summary = changeSummary.trim();
+    if (summary.isNotEmpty) {
+      return summary;
+    }
     final snapshot = currentSnapshot;
     if (snapshot.isEmpty) {
       return null;
@@ -191,6 +201,66 @@ String formatTimestampField(dynamic value) {
   return '—';
 }
 
+/// Human-readable summary of requested schedule fields for lists and dashboard.
+String summarizeScheduleChangeFields(
+  Map<String, dynamic> changes, {
+  Map<String, dynamic>? fallbackSnapshot,
+}) {
+  String field(List<String> keys) {
+    final fromChanges = readScheduleField(changes, keys);
+    if (fromChanges.isNotEmpty) {
+      return fromChanges;
+    }
+    if (fallbackSnapshot != null) {
+      return readScheduleField(fallbackSnapshot, keys);
+    }
+    return '';
+  }
+
+  final date = field(const ['date', 'scheduleDate']);
+  final start = field(const ['startTime', 'fromTime']);
+  final end = field(const ['endTime', 'toTime']);
+  var location = readScheduleField(changes, const [
+    'locationName',
+    'location',
+    'newLocationName',
+    'proposedLocationText',
+  ]);
+  if (location.isEmpty && fallbackSnapshot != null) {
+    location = readScheduleField(fallbackSnapshot, const [
+      'locationName',
+      'location',
+    ]);
+  }
+  final addr = readScheduleField(changes, const [
+    'locationAddress',
+    'siteAddress',
+    'newLocationAddress',
+  ]);
+  if (location.isNotEmpty && addr.isNotEmpty && location != addr) {
+    location = '$location\n$addr';
+  } else if (location.isEmpty && addr.isNotEmpty) {
+    location = addr;
+  }
+
+  final parts = <String>[];
+  if (date.isNotEmpty) {
+    var line = date;
+    if (start.isNotEmpty || end.isNotEmpty) {
+      final startLabel = start.isEmpty ? '?' : start;
+      final endLabel = end.isEmpty ? '?' : end;
+      line = '$line • $startLabel–$endLabel';
+    }
+    parts.add(line);
+  } else if (start.isNotEmpty || end.isNotEmpty) {
+    parts.add('${start.isEmpty ? "?" : start}–${end.isEmpty ? "?" : end}');
+  }
+  if (location.isNotEmpty) {
+    parts.add(location);
+  }
+  return parts.join('\n');
+}
+
 bool hasScheduleApplyFields(Map<String, dynamic> changes) {
   const keys = [
     'date',
@@ -202,6 +272,10 @@ bool hasScheduleApplyFields(Map<String, dynamic> changes) {
     'locationId',
     'locationName',
     'proposedLocationText',
+    'locationAddress',
+    'siteAddress',
+    'newLocationName',
+    'newLocationAddress',
     'contactId',
     'contactName',
     'notes',

@@ -20,7 +20,9 @@ import '../../whereabouts/presentation/whereabouts_controller.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../../locations/presentation/locations_controller.dart';
 import '../../notifications/domain/admin_message_request.dart';
+import '../../schedule_change_requests/domain/schedule_change_request.dart';
 import '../../schedule_change_requests/presentation/schedule_change_requests_controller.dart';
+import '../../schedule_change_requests/presentation/schedule_change_requests_page.dart';
 
 final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
   final firestore = ref.watch(firestoreProvider);
@@ -104,7 +106,7 @@ final globalSchedulesTodayCountProvider = Provider<int>((ref) {
       return count;
     },
     loading: () => 0,
-    error: (_, _) => 0,
+    error: (err, st) => 0,
   );
 });
 
@@ -123,7 +125,7 @@ final globalSchedulesNext7DaysCountProvider = Provider<int>((ref) {
       return count;
     },
     loading: () => 0,
-    error: (_, _) => 0,
+    error: (err, st) => 0,
   );
 });
 
@@ -145,7 +147,7 @@ final fighterUpcomingSchedulesCountProvider =
       return count;
     },
     loading: () => 0,
-    error: (_, _) => 0,
+    error: (err, st) => 0,
   );
 });
 
@@ -169,7 +171,7 @@ final fighterContactsCountFromSchedulesProvider =
       return ids.length;
     },
     loading: () => 0,
-    error: (_, _) => 0,
+    error: (err, st) => 0,
   );
 });
 
@@ -217,7 +219,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ref.watch(collectionCountProvider(FirestoreCollections.checkins));
     final notificationsAsync =
         ref.watch(collectionCountProvider(FirestoreCollections.notifications));
-    final pendingScheduleRequests = ref.watch(pendingScheduleChangeRequestsCountProvider);
+    final scheduleRequestsAsync = ref.watch(scheduleChangeRequestsStreamProvider);
+    final pendingScheduleRequests =
+        ref.watch(pendingScheduleChangeRequestsCountProvider);
+    final totalScheduleRequests =
+        ref.watch(scheduleChangeRequestsTotalCountProvider);
 
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 760;
@@ -287,8 +293,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
       _KpiItem(
         title: loc.tr('dashboard.scheduleRequests'),
-        value: '$pendingScheduleRequests',
+        value: scheduleRequestsAsync.isLoading
+            ? loc.tr('common.loading')
+            : scheduleRequestsAsync.hasError
+                ? '0'
+                : '$pendingScheduleRequests',
         icon: Icons.swap_horiz_outlined,
+        onTap: () => context.go(AppRoutes.scheduleRequests),
+        highlight: pendingScheduleRequests > 0,
       ),
     ];
 
@@ -299,6 +311,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       loc.tr('dashboard.schedules'): schedulesAsync.asData?.value ?? 0,
       loc.tr('nav.checkins'): checkinsAsync.asData?.value ?? 0,
       loc.tr('nav.notifications'): notificationsAsync.asData?.value ?? 0,
+      loc.tr('nav.scheduleRequests'): totalScheduleRequests,
     };
 
     return SingleChildScrollView(
@@ -424,10 +437,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           ),
           SizedBox(height: AppLayout.smallGap(context)),
           _ActionCenterPanel(
+            scheduleRequestsAsync: scheduleRequestsAsync,
             scheduleRequestsCount: pendingScheduleRequests,
-            scheduleRequestsLoading: false,
             checkinsCount: checkinsAsync.asData?.value ?? 0,
             checkinsLoading: checkinsAsync.isLoading,
+            fighters: fightersData,
           ),
           SizedBox(height: AppLayout.sectionGap(context)),
           Text(
@@ -558,6 +572,9 @@ class _FighterOverviewCard extends ConsumerWidget {
         ref.watch(fighterContactsCountFromSchedulesProvider(selectedFighterId));
     final upcomingSchedulesCount =
         ref.watch(fighterUpcomingSchedulesCountProvider(selectedFighterId));
+    final pendingScheduleRequestsCount = ref.watch(
+      pendingScheduleChangeRequestsForFighterProvider(selectedFighterId),
+    );
     final locationsAsync = ref.watch(fighterLocationsProvider(selectedFighterId));
     final contactsAsync = ref.watch(contactsStreamProvider);
     final allLocationsAsync = ref.watch(locationsStreamProvider);
@@ -775,6 +792,13 @@ class _FighterOverviewCard extends ConsumerWidget {
                 builder: (context, constraints) {
                   final crossAxisCount = constraints.maxWidth >= 980 ? 3 : 1;
                   final tiles = [
+                    if (pendingScheduleRequestsCount > 0)
+                      _OverviewStatCard(
+                        title: 'Pending schedule requests',
+                        value: '$pendingScheduleRequestsCount',
+                        icon: Icons.swap_horiz_outlined,
+                        onTap: () => context.go(AppRoutes.scheduleRequests),
+                      ),
                     _OverviewStatCard(
                       title: 'Schedules (next 7 days)',
                       value: '$upcomingSchedulesCount',
@@ -792,7 +816,7 @@ class _FighterOverviewCard extends ConsumerWidget {
                       value: locationsAsync.when(
                         data: (items) => '${items.length}',
                         loading: () => context.l10n.tr('common.loading'),
-                        error: (_, _) => '0',
+                        error: (err, st) => '0',
                       ),
                       icon: Icons.location_on_outlined,
                       onTap: () => context.go(AppRoutes.locations),
@@ -843,12 +867,12 @@ class _GlobalInsightsPanel extends ConsumerWidget {
     final schedulesToday = whereaboutsAsync.when(
       data: (items) => _computeSchedulesToday(items),
       loading: () => cache.schedulesToday,
-      error: (_, _) => cache.schedulesToday,
+      error: (err, st) => cache.schedulesToday,
     );
     final schedulesNext7 = whereaboutsAsync.when(
       data: (items) => _computeSchedulesNext7(items),
       loading: () => cache.schedulesNext7Days,
-      error: (_, _) => cache.schedulesNext7Days,
+      error: (err, st) => cache.schedulesNext7Days,
     );
     final scheme = Theme.of(context).colorScheme;
 
@@ -914,22 +938,29 @@ class _GlobalInsightsPanel extends ConsumerWidget {
 
 class _ActionCenterPanel extends ConsumerWidget {
   const _ActionCenterPanel({
+    required this.scheduleRequestsAsync,
     required this.scheduleRequestsCount,
-    required this.scheduleRequestsLoading,
     required this.checkinsCount,
     required this.checkinsLoading,
+    required this.fighters,
   });
 
+  final AsyncValue<List<ScheduleChangeRequest>> scheduleRequestsAsync;
   final int scheduleRequestsCount;
-  final bool scheduleRequestsLoading;
   final int checkinsCount;
   final bool checkinsLoading;
+  final List<Fighter> fighters;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.l10n;
     final scheme = Theme.of(context).colorScheme;
     final notificationsAsync = ref.watch(recentNotificationsProvider);
+    final pendingRequests = ref.watch(pendingScheduleChangeRequestsProvider);
+    final fighterNameById = {
+      for (final fighter in fighters) fighter.uid: fighter.fullName,
+    };
+    final scheduleRequestsLoading = scheduleRequestsAsync.isLoading;
 
     String formatTs(DateTime? dt) {
       if (dt == null) return '—';
@@ -958,6 +989,76 @@ class _ActionCenterPanel extends ConsumerWidget {
                   : '$scheduleRequestsCount',
               tone: scheme.tertiary,
               onTap: () => context.go(AppRoutes.scheduleRequests),
+            ),
+            SizedBox(height: AppLayout.smallGap(context)),
+            scheduleRequestsAsync.when(
+              loading: () => Text(
+                loc.tr('common.loading'),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              error: (err, st) => Text(
+                'Could not load schedule change requests.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.error,
+                    ),
+              ),
+              data: (_) {
+                final preview = pendingRequests.take(5).toList();
+                if (preview.isEmpty) {
+                  return Text(
+                    'No pending schedule change requests.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: preview.length,
+                  separatorBuilder: (context, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = preview[index];
+                    final fighterName =
+                        fighterNameById[item.fighterId] ?? item.fighterId;
+                    Fighter? fighter;
+                    for (final f in fighters) {
+                      if (f.uid == item.fighterId) {
+                        fighter = f;
+                        break;
+                      }
+                    }
+                    final summary = item.changeSummary.trim();
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        fighterName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [
+                          item.requestTypeLabel,
+                          if (summary.isNotEmpty) summary,
+                        ].join(' • '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => showScheduleChangeRequestDetail(
+                          context: context,
+                          request: item,
+                          fighter: fighter,
+                        ),
+                        child: const Text('Review'),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
             const Divider(height: 18),
             _ActionRow(
@@ -993,7 +1094,7 @@ class _ActionCenterPanel extends ConsumerWidget {
                       color: scheme.onSurfaceVariant,
                     ),
               ),
-              error: (_, _) => Text(
+              error: (err, st) => Text(
                 loc.tr('common.loading'),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -1049,7 +1150,7 @@ class _ActionCenterPanel extends ConsumerWidget {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: attention.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        separatorBuilder: (context, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final it = attention[index];
                           final type = it.target == 'broadcast'
@@ -1413,7 +1514,7 @@ class _AssignedLocationsPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return locationsAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, _) => const SizedBox.shrink(),
+      error: (err, st) => const SizedBox.shrink(),
       data: (items) {
         if (items.isEmpty) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
@@ -1578,11 +1679,15 @@ class _KpiItem {
     required this.title,
     required this.value,
     required this.icon,
+    this.onTap,
+    this.highlight = false,
   });
 
   final String title;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
+  final bool highlight;
 }
 
 class _KpiCard extends StatelessWidget {
@@ -1592,25 +1697,39 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final content = Padding(
+      padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            item.icon,
+            color: item.highlight ? scheme.tertiary : BrandTheme.vadaRed,
+          ),
+          SizedBox(height: AppLayout.smallGap(context)),
+          Text(item.title),
+          SizedBox(height: AppLayout.smallGap(context)),
+          Text(
+            item.value,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: item.highlight ? scheme.tertiary : null,
+                ),
+          ),
+        ],
+      ),
+    );
+
     return SizedBox(
       width: AppLayout.kpiCardWidth(context),
       child: Card(
-        child: Padding(
-          padding: EdgeInsets.all(AppLayout.cardPadding(context)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(item.icon, color: BrandTheme.vadaRed),
-              SizedBox(height: AppLayout.smallGap(context)),
-              Text(item.title),
-              SizedBox(height: AppLayout.smallGap(context)),
-              Text(
-                item.value,
-                style: Theme.of(context).textTheme.headlineSmall,
+        clipBehavior: Clip.antiAlias,
+        child: item.onTap == null
+            ? content
+            : InkWell(
+                onTap: item.onTap,
+                child: content,
               ),
-            ],
-          ),
-        ),
       ),
     );
   }

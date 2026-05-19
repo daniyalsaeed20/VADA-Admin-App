@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/firestore_collections.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
+import '../domain/schedule_change_approve_helpers.dart';
 import '../domain/schedule_change_request.dart';
 
 /// Builds a Firestore merge patch for `schedules/{id}` from approved `requestedChanges`.
@@ -70,10 +71,18 @@ class ScheduleApplyMapper {
     );
     _putString(patch, 'locationName', locationName);
 
-    final proposedText = readScheduleField(requestedChanges, const [
+    final explicitProposed = readScheduleField(requestedChanges, const [
       'proposedLocationText',
     ]);
-    _putString(patch, 'proposedLocationText', proposedText);
+    final summary = readRequestedNewSiteSummary(requestedChanges);
+    if (explicitProposed.isNotEmpty) {
+      _putString(patch, 'proposedLocationText', explicitProposed);
+    } else if (summary.isNotEmpty) {
+      _putString(patch, 'proposedLocationText', summary);
+    }
+
+    final locationAddress = readRequestedNewSiteAddress(requestedChanges);
+    _putString(patch, 'locationAddress', locationAddress);
 
     final contactId = readScheduleField(requestedChanges, const [
       'contactId',
@@ -119,12 +128,13 @@ class ScheduleApplyMapper {
     required String locationId,
     required Map<String, dynamic> requestedChanges,
   }) async {
-    final direct = readScheduleField(requestedChanges, const [
+    final explicit = readScheduleField(requestedChanges, const [
       'locationName',
       'location',
+      'newLocationName',
     ]);
-    if (direct.isNotEmpty) {
-      return direct;
+    if (explicit.isNotEmpty) {
+      return explicit;
     }
     if (locationId.isNotEmpty) {
       final fromDirectory = await _readLocationOrContactName(
@@ -135,7 +145,11 @@ class ScheduleApplyMapper {
         return fromDirectory;
       }
     }
-    return readScheduleField(requestedChanges, const ['proposedLocationText']);
+    final fromNewSite = readRequestedNewSiteName(requestedChanges);
+    if (fromNewSite.isNotEmpty) {
+      return fromNewSite;
+    }
+    return readRequestedNewSiteAddress(requestedChanges);
   }
 
   Future<String> _readLocationOrContactName({

@@ -1,14 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
+import '../../locations/presentation/locations_controller.dart';
 import '../../notifications/domain/schedule_change_notification_queue.dart';
+import '../../whereabouts/presentation/whereabouts_controller.dart';
+import '../data/schedule_change_approval_service.dart';
 import '../data/schedule_change_requests_repository.dart';
+import '../domain/approve_location_setup.dart';
 import '../domain/schedule_change_request.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 
 final scheduleChangeRequestsRepositoryProvider =
     Provider<ScheduleChangeRequestsRepository>((ref) {
   return ScheduleChangeRequestsRepository(ref.watch(firestoreProvider));
+});
+
+final scheduleChangeApprovalServiceProvider =
+    Provider<ScheduleChangeApprovalService>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  return ScheduleChangeApprovalService(
+    requests: ref.watch(scheduleChangeRequestsRepositoryProvider),
+    locations: ref.watch(locationsRepositoryProvider),
+    whereabouts: ref.watch(whereaboutsRepositoryProvider),
+    firestore: firestore,
+  );
 });
 
 final scheduleChangeRequestsStreamProvider =
@@ -22,8 +37,38 @@ final pendingScheduleChangeRequestsCountProvider = Provider<int>((ref) {
     data: (items) =>
         items.where((r) => r.status == ScheduleChangeRequestStatus.pending).length,
     loading: () => 0,
-    error: (_, _) => 0,
+    error: (err, st) => 0,
   );
+});
+
+final scheduleChangeRequestsTotalCountProvider = Provider<int>((ref) {
+  final requests = ref.watch(scheduleChangeRequestsStreamProvider);
+  return requests.when(
+    data: (items) => items.length,
+    loading: () => 0,
+    error: (err, st) => 0,
+  );
+});
+
+final pendingScheduleChangeRequestsProvider =
+    Provider<List<ScheduleChangeRequest>>((ref) {
+  final requests = ref.watch(scheduleChangeRequestsStreamProvider);
+  return requests.when(
+    data: (items) => items
+        .where((r) => r.status == ScheduleChangeRequestStatus.pending)
+        .toList(),
+    loading: () => const [],
+    error: (err, st) => const [],
+  );
+});
+
+final pendingScheduleChangeRequestsForFighterProvider =
+    Provider.family<int, String>((ref, fighterId) {
+  if (fighterId.trim().isEmpty) {
+    return 0;
+  }
+  final pending = ref.watch(pendingScheduleChangeRequestsProvider);
+  return pending.where((r) => r.fighterId == fighterId.trim()).length;
 });
 
 final scheduleByIdProvider =
@@ -77,6 +122,53 @@ class ScheduleChangeRequestMutationController
     await _review(request: request, approve: true, adminNotes: adminNotes);
   }
 
+  Future<void> approveWithSetup({
+    required ScheduleChangeRequest request,
+    required ApproveWithSetupOptions options,
+  }) async {
+    if (!request.isPending) {
+      return;
+    }
+
+    state =
+        state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
+    try {
+      final user = _ref.read(firebaseAuthProvider).currentUser;
+      if (user == null) {
+        throw StateError('Not signed in');
+      }
+
+      final result = await _ref.read(scheduleChangeApprovalServiceProvider).approveWithSetup(
+            request: request,
+            reviewedBy: user.uid,
+            options: options,
+          );
+
+      await _ref.read(scheduleChangeNotificationQueueProvider).queueResolution(
+            request: request,
+            approved: true,
+            adminNotes: options.adminNotes,
+            scheduleIdOverride: result.scheduleId,
+            requestedChangesOverride: result.effectiveChanges,
+          );
+
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'Request approved and schedule updated.',
+      );
+    } on StateError catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: e.message,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Could not complete approval. Please try again.',
+      );
+    }
+  }
+
   Future<void> reject({
     required ScheduleChangeRequest request,
     required String adminNotes,
@@ -99,6 +191,21 @@ class ScheduleChangeRequestMutationController
       final user = _ref.read(firebaseAuthProvider).currentUser;
       if (user == null) {
         throw StateError('Not signed in');
+      }
+
+      if (approve) {
+        final locationId = readScheduleField(
+          request.requestedChanges,
+          const ['locationId', 'selectedLocation'],
+        );
+        if (locationId.isNotEmpty) {
+          await _ref
+              .read(locationsRepositoryProvider)
+              .ensureFighterAssignedToLocation(
+                locationId: locationId,
+                fighterId: request.fighterId,
+              );
+        }
       }
 
       await _ref.read(scheduleChangeRequestsRepositoryProvider).reviewRequest(

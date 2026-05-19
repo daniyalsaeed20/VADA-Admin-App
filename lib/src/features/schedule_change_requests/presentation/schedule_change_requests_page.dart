@@ -9,10 +9,29 @@ import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../../locations/presentation/locations_controller.dart';
+import '../../locations/domain/location_record.dart';
 import '../../contacts/presentation/contacts_controller.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
+import '../domain/approve_location_setup.dart';
+import '../domain/schedule_change_approve_helpers.dart';
 import '../domain/schedule_change_request.dart';
+import 'widgets/approve_schedule_change_setup_dialog.dart';
 import 'schedule_change_requests_controller.dart';
+
+/// Opens the full review dialog (approve / reject / location setup).
+void showScheduleChangeRequestDetail({
+  required BuildContext context,
+  required ScheduleChangeRequest request,
+  Fighter? fighter,
+}) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => _RequestDetailDialog(
+      request: request,
+      fighter: fighter,
+    ),
+  );
+}
 
 class ScheduleChangeRequestsPage extends ConsumerStatefulWidget {
   const ScheduleChangeRequestsPage({super.key});
@@ -99,7 +118,7 @@ class _ScheduleChangeRequestsPageState
                   ],
                 ),
               ),
-              error: (_, _) => const Center(
+              error: (err, st) => const Center(
                 child: Text('Could not load schedule change requests.'),
               ),
               data: (requests) {
@@ -203,7 +222,7 @@ class _ScheduleChangeRequestsPageState
                       child: isNarrow
                           ? ListView.separated(
                               itemCount: pageItems.length,
-                              separatorBuilder: (_, _) =>
+                              separatorBuilder: (context, _) =>
                                   SizedBox(height: AppLayout.smallGap(context)),
                               itemBuilder: (context, index) {
                                 final item = pageItems[index];
@@ -219,7 +238,11 @@ class _ScheduleChangeRequestsPageState
                               },
                             )
                           : SingleChildScrollView(
-                              child: DataTable(
+                              scrollDirection: Axis.horizontal,
+                              child: SingleChildScrollView(
+                                child: DataTable(
+                                  columnSpacing: 20,
+                                  horizontalMargin: 12,
                                 columns: const [
                                   DataColumn(label: Text('Fighter')),
                                   DataColumn(label: Text('Type')),
@@ -283,6 +306,7 @@ class _ScheduleChangeRequestsPageState
                                     ],
                                   );
                                 }).toList(),
+                                ),
                               ),
                             ),
                     ),
@@ -341,9 +365,11 @@ class _ScheduleChangeRequestsPageState
       }
       final fighterName =
           (fighterNameById[item.fighterId] ?? item.fighterId).toLowerCase();
+      final summary = item.changeSummary.toLowerCase();
       return fighterName.contains(query) ||
           item.notes.toLowerCase().contains(query) ||
-          item.requestTypeLabel.toLowerCase().contains(query);
+          item.requestTypeLabel.toLowerCase().contains(query) ||
+          summary.contains(query);
     }).toList();
   }
 
@@ -351,12 +377,10 @@ class _ScheduleChangeRequestsPageState
     required ScheduleChangeRequest request,
     required Fighter? fighter,
   }) {
-    showDialog<void>(
+    showScheduleChangeRequestDetail(
       context: context,
-      builder: (dialogContext) => _RequestDetailDialog(
-        request: request,
-        fighter: fighter,
-      ),
+      request: request,
+      fighter: fighter,
     );
   }
 
@@ -589,9 +613,12 @@ class _RequestCard extends StatelessWidget {
         onTap: onTap,
         title: Text(fighterName),
         subtitle: Text(
-          '${request.requestTypeLabel} • ${_formatDate(request.createdAt)}\n'
-          '${request.notesPreview}',
-          maxLines: 3,
+          [
+            '${request.requestTypeLabel} • ${_formatDate(request.createdAt)}',
+            if (request.changeSummary.trim().isNotEmpty) request.changeSummary,
+            if (request.notes.trim().isNotEmpty) request.notesPreview,
+          ].join('\n'),
+          maxLines: 4,
           overflow: TextOverflow.ellipsis,
         ),
         isThreeLine: true,
@@ -698,10 +725,8 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
     final contactNameById = {for (final c in contacts) c.id: c.name};
 
     final canAct = request.isPending && !mutation.isLoading;
-    final proposedText = readScheduleField(
-      request.requestedChanges,
-      const ['proposedLocationText'],
-    );
+    final newSiteSummary =
+        readRequestedNewSiteSummary(request.requestedChanges);
 
     return AlertDialog(
       title: Text('${request.requestTypeLabel} • ${request.statusLabel}'),
@@ -757,9 +782,9 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                 requestedChanges: request.requestedChanges,
                 liveSchedule: liveScheduleAsync.asData?.value,
                 locationNameById: locationNameById,
-                proposedLocationText: proposedText,
+                proposedLocationText: newSiteSummary,
               ),
-              if (proposedText.isNotEmpty) ...[
+              if (newSiteSummary.isNotEmpty) ...[
                 SizedBox(height: AppLayout.mediumGap(context)),
                 Container(
                   width: double.infinity,
@@ -779,7 +804,7 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                       SizedBox(height: AppLayout.smallGap(context)),
-                      Text(proposedText),
+                      Text(newSiteSummary),
                     ],
                   ),
                 ),
@@ -807,6 +832,16 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                 SizedBox(height: AppLayout.smallGap(context)),
                 Text(
                   'Approving will update schedule $scheduleId with the requested fields.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+              if (request.isPending && needsApproveSetupDialog(request)) ...[
+                SizedBox(height: AppLayout.smallGap(context)),
+                Text(
+                  'Approve will open a short setup: link or create a testing location '
+                  '(and create a schedule row if none is linked).',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -842,9 +877,30 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
   }
 
   Future<void> _approve(ScheduleChangeRequest request) async {
-    await ref
-        .read(scheduleChangeRequestMutationControllerProvider.notifier)
-        .approve(request: request, adminNotes: _adminNotesController.text);
+    if (needsApproveSetupDialog(request)) {
+      final locations = ref.read(locationsStreamProvider).asData?.value ?? const <LocationRecord>[];
+      final draft = await showApproveScheduleChangeSetupDialog(
+        context: context,
+        request: request,
+        locations: locations,
+      );
+      if (!mounted || draft == null) {
+        return;
+      }
+      await ref.read(scheduleChangeRequestMutationControllerProvider.notifier).approveWithSetup(
+            request: request,
+            options: ApproveWithSetupOptions(
+              adminNotes: _adminNotesController.text,
+              locationSetup: draft.locationSetup,
+              createScheduleIfMissing: draft.createScheduleIfMissing,
+            ),
+          );
+    } else {
+      await ref.read(scheduleChangeRequestMutationControllerProvider.notifier).approve(
+            request: request,
+            adminNotes: _adminNotesController.text,
+          );
+    }
     if (mounted) {
       Navigator.pop(context);
     }
@@ -984,7 +1040,15 @@ class _ChangeComparisonSection extends StatelessWidget {
     addRow('Date', 'Date', const ['date', 'scheduleDate', 'startAt']);
     addRow('Start time', 'Start', const ['startTime', 'startAt']);
     addRow('End time', 'End', const ['endTime', 'endAt']);
-    addRow('Location', 'Location', const ['locationName', 'locationId']);
+    addRow('Location', 'Location', const [
+      'locationName',
+      'location',
+      'newLocationName',
+      'locationId',
+      'locationAddress',
+      'siteAddress',
+      'newLocationAddress',
+    ]);
 
     if (rows.isEmpty) {
       return Column(

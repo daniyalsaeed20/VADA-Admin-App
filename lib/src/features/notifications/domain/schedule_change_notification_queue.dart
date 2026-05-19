@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
+import '../../schedule_change_requests/domain/schedule_change_approve_helpers.dart';
 import '../../schedule_change_requests/domain/schedule_change_request.dart';
 import '../../settings/domain/notification_settings.dart';
 import '../../settings/presentation/notification_settings_controller.dart';
@@ -30,19 +31,30 @@ class ScheduleChangeNotificationQueue {
     required ScheduleChangeRequest request,
     required bool approved,
     required String adminNotes,
+    String? scheduleIdOverride,
+    Map<String, dynamic>? requestedChangesOverride,
   }) async {
     if (!_settings.enableScheduleChangeReviews) {
       return;
     }
 
+    final effectiveChanges =
+        requestedChangesOverride ?? request.requestedChanges;
+    final effectiveScheduleId = (scheduleIdOverride?.trim().isNotEmpty ?? false)
+        ? scheduleIdOverride!.trim()
+        : (request.scheduleId?.trim() ?? '');
+
     final fighterName = await _resolver.fighterName(request.fighterId);
     final locationId = readScheduleField(
-      request.requestedChanges,
-      const ['locationId'],
+      effectiveChanges,
+      const ['locationId', 'selectedLocation'],
     );
-    final locationName = locationId.isEmpty
-        ? ''
-        : await _resolver.locationName(locationId);
+    final requestName = readRequestedNewSiteName(effectiveChanges);
+    final locationName = requestName.isNotEmpty
+        ? requestName
+        : (locationId.isEmpty
+            ? readRequestedNewSiteAddress(effectiveChanges)
+            : await _resolver.locationName(locationId));
 
     final placeholders =
         NotificationMessageComposer.placeholdersForScheduleChangeRequest(
@@ -50,6 +62,7 @@ class ScheduleChangeNotificationQueue {
       fighterName: fighterName,
       adminNotes: adminNotes,
       locationName: locationName,
+      requestedChangesOverride: effectiveChanges,
     );
 
     final message = NotificationMessageComposer.composeScheduleChangeResolution(
@@ -63,7 +76,7 @@ class ScheduleChangeNotificationQueue {
       body: message.body,
       fighterId: request.fighterId,
       requestId: request.id,
-      scheduleId: request.scheduleId,
+      scheduleId: effectiveScheduleId.isEmpty ? null : effectiveScheduleId,
       createdBy: _createdBy,
     );
   }

@@ -58,35 +58,52 @@ class ScheduleChangeRequestsRepository {
     required String adminNotes,
     required String reviewedBy,
     required ScheduleChangeRequest request,
+    String? scheduleIdOverride,
+    Map<String, dynamic>? requestedChangesOverride,
+    Map<String, dynamic>? appliedSnapshot,
+    bool skipScheduleApply = false,
   }) async {
     final now = FieldValue.serverTimestamp();
     final status =
         approve ? ScheduleChangeRequestStatus.approved : ScheduleChangeRequestStatus.rejected;
 
-    await _requests.doc(requestId).update({
+    final update = <String, dynamic>{
       'status': status.value,
       'adminNotes': adminNotes.trim(),
       'reviewedAt': now,
       'reviewedBy': reviewedBy.trim(),
       'updatedAt': now,
-    });
+    };
 
-    if (!approve) {
+    final scheduleId =
+        scheduleIdOverride?.trim() ?? request.scheduleId?.trim() ?? '';
+    if (scheduleId.isNotEmpty &&
+        (request.scheduleId == null || request.scheduleId!.trim().isEmpty)) {
+      update['scheduleId'] = scheduleId;
+    }
+    if (appliedSnapshot != null && appliedSnapshot.isNotEmpty) {
+      update['appliedSnapshot'] = appliedSnapshot;
+    }
+
+    await _requests.doc(requestId).update(update);
+
+    if (!approve || skipScheduleApply) {
       return;
     }
 
-    final scheduleId = request.scheduleId?.trim() ?? '';
     if (scheduleId.isEmpty) {
       return;
     }
-    if (!hasScheduleApplyFields(request.requestedChanges)) {
+
+    final changes = requestedChangesOverride ?? request.requestedChanges;
+    if (!hasScheduleApplyFields(changes)) {
       return;
     }
 
     await _applyRequestedChangesToSchedule(
       scheduleId: scheduleId,
       fighterId: request.fighterId,
-      requestedChanges: request.requestedChanges,
+      requestedChanges: changes,
     );
   }
 
