@@ -25,7 +25,7 @@ class BootstrapService {
       FirestoreCollections.schedules,
       FirestoreCollections.checkins,
       FirestoreCollections.notifications,
-      FirestoreCollections.scheduleRequests,
+      FirestoreCollections.scheduleChangeRequests,
       FirestoreCollections.settings,
     ];
 

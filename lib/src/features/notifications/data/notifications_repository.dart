@@ -67,5 +67,37 @@ class NotificationsRepository {
     };
     await _notifications.add(payload);
   }
+
+  Future<void> createScheduleChangeResolution({
+    required String title,
+    required String body,
+    required String fighterId,
+    required String requestId,
+    String? scheduleId,
+    required String createdBy,
+  }) async {
+    final data = <String, String>{
+      'screen': 'whereabouts',
+      'requestId': requestId,
+    };
+    final schedule = scheduleId?.trim() ?? '';
+    if (schedule.isNotEmpty) {
+      data['scheduleId'] = schedule;
+    }
+
+    final payload = <String, dynamic>{
+      'type': 'schedule_update',
+      'title': title.trim(),
+      'body': body.trim(),
+      'target': 'user',
+      'targetUserId': fighterId.trim(),
+      'data': data,
+      'status': 'pending',
+      'createdBy': createdBy,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    await _notifications.add(payload);
+  }
 }
 

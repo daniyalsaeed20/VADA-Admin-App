@@ -5,7 +5,7 @@ class FirestoreCollections {
   static const schedules = 'schedules';
   static const checkins = 'checkins';
   static const notifications = 'notifications';
-  static const scheduleRequests = 'schedule_requests';
+  static const scheduleChangeRequests = 'scheduleChangeRequests';
   static const settings = 'settings';
   static const metaDoc = '_meta';
 }

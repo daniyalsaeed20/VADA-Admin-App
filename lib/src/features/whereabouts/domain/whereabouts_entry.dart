@@ -8,6 +8,7 @@ class WhereaboutsEntry {
     required this.startTime,
     required this.endTime,
     required this.locationId,
+    required this.locationName,
     required this.contactId,
     required this.notes,
     required this.recurrence,
@@ -21,6 +22,7 @@ class WhereaboutsEntry {
   final String startTime;
   final String endTime;
   final String locationId;
+  final String locationName;
   final String contactId;
   final String notes;
   final String recurrence;
@@ -45,7 +47,11 @@ class WhereaboutsEntry {
       locationId: _readString(data, const [
         'locationId',
         'selectedLocation',
+      ]),
+      locationName: _readString(data, const [
+        'locationName',
         'location',
+        'proposedLocationText',
       ]),
       contactId: _readString(data, const [
         'contactId',
@@ -60,6 +66,20 @@ class WhereaboutsEntry {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
+}
+
+String resolveLocationDisplay(
+  WhereaboutsEntry entry,
+  Map<String, String> locationNamesById,
+) {
+  if (entry.locationName.trim().isNotEmpty) {
+    return entry.locationName.trim();
+  }
+  final fromId = locationNamesById[entry.locationId];
+  if (fromId != null && fromId.trim().isNotEmpty) {
+    return fromId.trim();
+  }
+  return entry.locationId;
 }
 
 String normalizeRecurrence(String? rawValue) {

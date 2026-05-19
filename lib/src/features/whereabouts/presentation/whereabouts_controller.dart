@@ -1,11 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vada_admin_app/src/core/firebase/firebase_providers.dart';
 
-import '../../../core/firebase/firebase_providers.dart';
-import '../../../core/constants/firestore_collections.dart';
 import '../data/whereabouts_repository.dart';
 import '../domain/whereabouts_entry.dart';
-import '../../notifications/presentation/notifications_controller.dart';
-import '../../settings/presentation/notification_settings_controller.dart';
+import '../../notifications/domain/schedule_update_notification_queue.dart';
 
 final whereaboutsRepositoryProvider = Provider<WhereaboutsRepository>((ref) {
   return WhereaboutsRepository(ref.watch(firestoreProvider));
@@ -49,114 +47,6 @@ class WhereaboutsMutationController
 
   final Ref _ref;
 
-  Future<String?> _readDocName({
-    required String collection,
-    required String docId,
-    required String field,
-  }) async {
-    if (docId.trim().isEmpty) {
-      return null;
-    }
-    try {
-      final snap = await _ref
-          .read(firestoreProvider)
-          .collection(collection)
-          .doc(docId.trim())
-          .get();
-      final value = snap.data()?[field];
-      if (value is String && value.trim().isNotEmpty) {
-        return value.trim();
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _queueScheduleUpdateNotification({
-    required String fighterId,
-    required String scheduleId,
-    required String date,
-    required String startTime,
-    required String endTime,
-    required String locationId,
-    required String contactId,
-    required String recurrence,
-    required String notes,
-    required bool isCreate,
-  }) async {
-    final notifSettings = _ref.read(notificationSettingsCurrentProvider);
-    if (!notifSettings.enableScheduleUpdates) {
-      return;
-    }
-    final fighterName = await _readDocName(
-          collection: FirestoreCollections.users,
-          docId: fighterId,
-          field: 'fullName',
-        ) ??
-        'Fighter';
-    final locationName = await _readDocName(
-          collection: FirestoreCollections.locations,
-          docId: locationId,
-          field: 'name',
-        ) ??
-        'Location';
-    final contactName = await _readDocName(
-          collection: FirestoreCollections.contacts,
-          docId: contactId,
-          field: 'name',
-        ) ??
-        'Contact';
-
-    final defaultTitle = isCreate
-        ? 'Schedule created • $fighterName'
-        : 'Schedule updated • $fighterName';
-
-    final notesPreview = notes.trim().isEmpty
-        ? null
-        : (notes.trim().length <= 80
-            ? notes.trim()
-            : '${notes.trim().substring(0, 80)}…');
-    final bodyLines = <String>[
-      '$date • $startTime-$endTime',
-      'Location: $locationName',
-      'Contact: $contactName',
-      'Repeat: ${normalizeRecurrence(recurrence)}',
-      if (notesPreview != null) 'Notes: $notesPreview',
-    ];
-    final defaultBody = bodyLines.join('\n');
-
-    String applyTemplate(String template, String fallback) {
-      final t = template.trim();
-      if (t.isEmpty) return fallback;
-      return t
-          .replaceAll('{fighterName}', fighterName)
-          .replaceAll('{date}', date)
-          .replaceAll('{startTime}', startTime)
-          .replaceAll('{endTime}', endTime)
-          .replaceAll('{locationName}', locationName)
-          .replaceAll('{contactName}', contactName)
-          .replaceAll('{notes}', notes.trim());
-    }
-
-    final title = applyTemplate(
-      notifSettings.scheduleUpdateTitleTemplate,
-      defaultTitle,
-    );
-    final body = applyTemplate(
-      notifSettings.scheduleUpdateBodyTemplate,
-      defaultBody,
-    );
-
-    await _ref.read(notificationsRepositoryProvider).createScheduleUpdate(
-          title: title,
-          body: body,
-          fighterId: fighterId,
-          scheduleId: scheduleId,
-          createdBy: _ref.read(firebaseAuthProvider).currentUser!.uid,
-        );
-  }
-
   Future<void> create({
     required String fighterId,
     required String date,
@@ -180,18 +70,18 @@ class WhereaboutsMutationController
             notes: notes,
             recurrence: recurrence,
           );
-      await _queueScheduleUpdateNotification(
-        fighterId: fighterId,
-        scheduleId: id,
-        date: date,
-        startTime: startTime,
-        endTime: endTime,
-        locationId: locationId,
-        contactId: contactId,
-        recurrence: recurrence,
-        notes: notes,
-        isCreate: true,
-      );
+      await _ref.read(scheduleUpdateNotificationQueueProvider).queueScheduleChange(
+            fighterId: fighterId,
+            scheduleId: id,
+            date: date,
+            startTime: startTime,
+            endTime: endTime,
+            locationId: locationId,
+            contactId: contactId,
+            recurrence: recurrence,
+            notes: notes,
+            isCreate: true,
+          );
       state = state.copyWith(
         isLoading: false,
         successMessage: 'whereabouts.createSuccess',
@@ -229,18 +119,18 @@ class WhereaboutsMutationController
             notes: notes,
             recurrence: recurrence,
           );
-      await _queueScheduleUpdateNotification(
-        fighterId: fighterId,
-        scheduleId: id,
-        date: date,
-        startTime: startTime,
-        endTime: endTime,
-        locationId: locationId,
-        contactId: contactId,
-        recurrence: recurrence,
-        notes: notes,
-        isCreate: false,
-      );
+      await _ref.read(scheduleUpdateNotificationQueueProvider).queueScheduleChange(
+            fighterId: fighterId,
+            scheduleId: id,
+            date: date,
+            startTime: startTime,
+            endTime: endTime,
+            locationId: locationId,
+            contactId: contactId,
+            recurrence: recurrence,
+            notes: notes,
+            isCreate: false,
+          );
       state = state.copyWith(
         isLoading: false,
         successMessage: 'whereabouts.updateSuccess',

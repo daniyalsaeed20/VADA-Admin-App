@@ -10,11 +10,12 @@ import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/fighters/presentation/fighters_page.dart';
 import '../../features/contacts/presentation/contacts_page.dart';
 import '../../features/locations/presentation/locations_page.dart';
+import '../../features/checkins/presentation/checkins_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/whereabouts/presentation/whereabouts_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
-import '../../features/shared/presentation/coming_soon_page.dart';
+import '../../features/schedule_change_requests/presentation/schedule_change_requests_page.dart';
 import '../../features/shell/presentation/admin_shell.dart';
 import 'router_refresh_stream.dart';
 
@@ -66,15 +67,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.scheduleRequests,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
-              child:
-                  const ComingSoonPage(titleKey: 'nav.scheduleRequests'),
+              child: const ScheduleChangeRequestsPage(),
             ),
           ),
           GoRoute(
             path: AppRoutes.checkins,
             pageBuilder: (context, state) => _noTransitionPage(
               state: state,
-              child: const ComingSoonPage(titleKey: 'nav.checkins'),
+              child: const CheckinsPage(),
             ),
           ),
           GoRoute(

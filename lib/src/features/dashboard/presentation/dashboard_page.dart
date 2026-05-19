@@ -20,6 +20,7 @@ import '../../whereabouts/presentation/whereabouts_controller.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../../locations/presentation/locations_controller.dart';
 import '../../notifications/domain/admin_message_request.dart';
+import '../../schedule_change_requests/presentation/schedule_change_requests_controller.dart';
 
 final collectionCountProvider = StreamProvider.family<int, String>((ref, name) {
   final firestore = ref.watch(firestoreProvider);
@@ -216,9 +217,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ref.watch(collectionCountProvider(FirestoreCollections.checkins));
     final notificationsAsync =
         ref.watch(collectionCountProvider(FirestoreCollections.notifications));
-    final scheduleRequestsAsync = ref.watch(
-      collectionCountProvider(FirestoreCollections.scheduleRequests),
-    );
+    final pendingScheduleRequests = ref.watch(pendingScheduleChangeRequestsCountProvider);
 
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 760;
@@ -288,7 +287,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
       _KpiItem(
         title: loc.tr('dashboard.scheduleRequests'),
-        value: valueForCount(scheduleRequestsAsync),
+        value: '$pendingScheduleRequests',
         icon: Icons.swap_horiz_outlined,
       ),
     ];
@@ -425,8 +424,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           ),
           SizedBox(height: AppLayout.smallGap(context)),
           _ActionCenterPanel(
-            scheduleRequestsCount: scheduleRequestsAsync.asData?.value ?? 0,
-            scheduleRequestsLoading: scheduleRequestsAsync.isLoading,
+            scheduleRequestsCount: pendingScheduleRequests,
+            scheduleRequestsLoading: false,
             checkinsCount: checkinsAsync.asData?.value ?? 0,
             checkinsLoading: checkinsAsync.isLoading,
           ),
@@ -951,7 +950,9 @@ class _ActionCenterPanel extends ConsumerWidget {
             _ActionRow(
               icon: Icons.swap_horiz_outlined,
               title: loc.tr('dashboard.scheduleRequestsShort'),
-              subtitle: loc.tr('dashboard.comingSoonModule'),
+              subtitle: scheduleRequestsCount > 0
+                  ? '$scheduleRequestsCount pending for review'
+                  : 'No pending requests',
               value: scheduleRequestsLoading
                   ? loc.tr('common.loading')
                   : '$scheduleRequestsCount',

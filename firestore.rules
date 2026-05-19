@@ -36,7 +36,114 @@ service cloud.firestore {
           && request.resource.data.fighterId == request.auth.uid;
     }
 
-    // Users collection
+    function validScheduleChangeRequestType() {
+      return request.resource.data.requestType in [
+        'new_location',
+        'time_change',
+        'schedule_update',
+      ];
+    }
+
+    function linkedSchedule(scheduleId) {
+      return get(/databases/$(database)/documents/schedules/$(scheduleId));
+    }
+
+    function scheduleExistsAndOwned(scheduleId) {
+      return scheduleId is string
+          && scheduleId.size() > 0
+          && exists(/databases/$(database)/documents/schedules/$(scheduleId))
+          && linkedSchedule(scheduleId).data.fighterId == request.auth.uid;
+    }
+
+    function scheduleIsUpcoming(scheduleId) {
+      return scheduleExistsAndOwned(scheduleId)
+          && linkedSchedule(scheduleId).data.endAt > request.time;
+    }
+
+    function requestHasScheduleId() {
+      return request.resource.data.keys().hasAll(['scheduleId'])
+          && request.resource.data.scheduleId is string
+          && request.resource.data.scheduleId.size() > 0;
+    }
+
+    function requestedChanges() {
+      return request.resource.data.requestedChanges;
+    }
+
+    function requestedStartAtIsUpcoming() {
+      return !('startAt' in requestedChanges())
+          || requestedChanges().startAt > request.time;
+    }
+
+    function requestedEndAtIsUpcoming() {
+      return !('endAt' in requestedChanges())
+          || requestedChanges().endAt > request.time;
+    }
+
+    function hasLocationChangeFromSchedule(scheduleId) {
+      let schedule = linkedSchedule(scheduleId).data;
+      let changes = requestedChanges();
+      let locationIdChanged = 'locationId' in changes
+          && changes.locationId is string
+          && changes.locationId.size() > 0
+          && ('locationId' in schedule)
+          && schedule.locationId is string
+          && changes.locationId != schedule.locationId;
+      let proposedDiffers = 'proposedLocationText' in changes
+          && changes.proposedLocationText is string
+          && changes.proposedLocationText.size() > 0
+          && (
+            !('locationName' in schedule)
+            || !(schedule.locationName is string)
+            || changes.proposedLocationText != schedule.locationName
+          );
+      let locationNameChanged = 'locationName' in changes
+          && changes.locationName is string
+          && changes.locationName.size() > 0
+          && ('locationName' in schedule)
+          && schedule.locationName is string
+          && changes.locationName != schedule.locationName;
+      return locationIdChanged || proposedDiffers || locationNameChanged;
+    }
+
+    function hasTimeChangeFields() {
+      let changes = requestedChanges();
+      return ('startAt' in changes)
+          || ('endAt' in changes)
+          || ('date' in changes)
+          || ('startTime' in changes)
+          || ('endTime' in changes);
+    }
+
+    function validChangesForRequestType(scheduleId) {
+      return request.resource.data.requestType == 'new_location'
+          ? hasLocationChangeFromSchedule(scheduleId)
+          : request.resource.data.requestType == 'time_change'
+          ? hasTimeChangeFields()
+          : request.resource.data.requestType == 'schedule_update'
+          ? (hasTimeChangeFields() || hasLocationChangeFromSchedule(scheduleId))
+          : false;
+    }
+
+    // Duplicate pending requests per schedule are blocked in the mobile app
+    // before create. Firestore rules cannot query sibling documents on create.
+    function fighterCreatesScheduleChangeRequest() {
+      let scheduleId = request.resource.data.scheduleId;
+      return isFighter()
+          && fighterOwnsRequestResource()
+          && request.resource.data.status == 'pending'
+          && validScheduleChangeRequestType()
+          && requestHasScheduleId()
+          && scheduleIsUpcoming(scheduleId)
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() > 0
+          && request.resource.data.requestedChanges is map
+          && requestedChanges().size() > 0
+          && validChangesForRequestType(scheduleId)
+          && requestedStartAtIsUpcoming()
+          && requestedEndAtIsUpcoming();
+    }
+
     match /users/{userId} {
       allow read: if isAdmin() || isSelf(userId);
       allow create, update, delete: if isAdmin();
@@ -46,14 +153,11 @@ service cloud.firestore {
         allow create, update, delete: if isSelf(userId);
       }
 
-      // Per-user notification read state (client-managed)
       match /notificationReads/{notificationId} {
-        allow read, create, update, delete: if request.auth != null
-            && request.auth.uid == userId;
+        allow read, create, update, delete: if isSelf(userId);
       }
     }
 
-    // Contacts: fighter-owned by fighterId
     match /contacts/{docId} {
       allow read: if isAdmin()
           || (isFighter() && (docId == '_meta' || fighterOwnsResource()));
@@ -65,13 +169,11 @@ service cloud.firestore {
           || (isFighter() && fighterOwnsResource());
     }
 
-    // Locations: fighters are view-only
     match /locations/{docId} {
       allow read: if isAdmin() || isFighter();
       allow write: if isAdmin();
     }
 
-    // Schedules / Whereabouts: fighter-owned by fighterId
     match /schedules/{docId} {
       allow read: if isAdmin()
           || (isFighter() && (docId == '_meta' || fighterOwnsResource()));
@@ -84,7 +186,23 @@ service cloud.firestore {
     }
 
     match /checkins/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin()
+          || (isFighter() && fighterOwnsResource());
+
+      allow create: if isAdmin()
+          || (isFighter() && fighterOwnsRequestResource());
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /scheduleChangeRequests/{docId} {
+      allow read: if isAdmin()
+          || (isFighter() && fighterOwnsResource());
+
+      allow create: if isAdmin()
+          || fighterCreatesScheduleChangeRequest();
+
+      allow update, delete: if isAdmin();
     }
 
     match /notifications/{docId} {

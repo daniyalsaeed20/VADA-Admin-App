@@ -196,9 +196,11 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                 final fighterName =
                                     fighterNames[item.fighterId] ??
                                         loc.tr('whereabouts.na');
-                                final locationName =
-                                    locationNames[item.locationId] ??
-                                        loc.tr('whereabouts.na');
+                                final locationName = _locationLabel(
+                                  item,
+                                  locationNames,
+                                  loc.tr('whereabouts.na'),
+                                );
                                 final contactName =
                                     contactNames[item.contactId] ??
                                         loc.tr('whereabouts.na');
@@ -315,9 +317,11 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                   final fighterName =
                                       fighterNames[item.fighterId] ??
                                           loc.tr('whereabouts.na');
-                                  final locationName =
-                                      locationNames[item.locationId] ??
-                                          loc.tr('whereabouts.na');
+                                  final locationName = _locationLabel(
+                                    item,
+                                    locationNames,
+                                    loc.tr('whereabouts.na'),
+                                  );
                                   final contactName =
                                       contactNames[item.contactId] ??
                                           loc.tr('whereabouts.na');
@@ -432,7 +436,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
     return items.where((item) {
       final fighter = fighterNames[item.fighterId] ?? '';
       final contact = contactNames[item.contactId] ?? '';
-      final location = locationNames[item.locationId] ?? '';
+      final location = resolveLocationDisplay(item, locationNames);
       return fighter.toLowerCase().contains(query) ||
           contact.toLowerCase().contains(query) ||
           location.toLowerCase().contains(query) ||
@@ -736,8 +740,11 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
           ...dayItems.map((entry) {
             final fighterName =
                 fighterNames[entry.fighterId] ?? loc.tr('whereabouts.na');
-            final locationName =
-                locationNames[entry.locationId] ?? loc.tr('whereabouts.na');
+            final locationName = _locationLabel(
+              entry,
+              locationNames,
+              loc.tr('whereabouts.na'),
+            );
             final contactName =
                 contactNames[entry.contactId] ?? loc.tr('whereabouts.na');
             return Padding(
@@ -1513,6 +1520,15 @@ class _MutationBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+String _locationLabel(
+  WhereaboutsEntry entry,
+  Map<String, String> locationNamesById,
+  String fallback,
+) {
+  final label = resolveLocationDisplay(entry, locationNamesById);
+  return label.isEmpty ? fallback : label;
 }
 
 String _recurrenceLabelKey(String value) {

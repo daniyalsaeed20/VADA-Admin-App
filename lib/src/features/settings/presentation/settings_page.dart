@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/firebase/firebase_providers.dart';
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
+import '../../notifications/domain/notification_message_composer.dart';
 import '../domain/notification_settings.dart';
 import 'notification_settings_controller.dart';
+import 'widgets/notification_template_editor.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -17,19 +19,19 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  static const _defaultScheduleUpdateTitleTemplate =
-      'Schedule updated • {fighterName}';
-  static const _defaultScheduleUpdateBodyTemplate = '{date} • {startTime}-{endTime}\n'
-      'Location: {locationName}\n'
-      'Contact: {contactName}\n'
-      'Repeat: (auto)\n'
-      '{notes}';
-
   final _schedTitleCtrl = TextEditingController();
   final _schedBodyCtrl = TextEditingController();
+  final _changeApprovedTitleCtrl = TextEditingController();
+  final _changeApprovedBodyCtrl = TextEditingController();
+  final _changeRejectedTitleCtrl = TextEditingController();
+  final _changeRejectedBodyCtrl = TextEditingController();
 
   final _schedTitleFocus = FocusNode();
   final _schedBodyFocus = FocusNode();
+  final _changeApprovedTitleFocus = FocusNode();
+  final _changeApprovedBodyFocus = FocusNode();
+  final _changeRejectedTitleFocus = FocusNode();
+  final _changeRejectedBodyFocus = FocusNode();
 
   final _currentPasswordCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
@@ -41,74 +43,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _initialized = false;
   bool _enableAdminMessages = true;
   bool _enableScheduleUpdates = true;
-  _ActiveScheduleField _activeField = _ActiveScheduleField.none;
+  bool _enableScheduleChangeReviews = true;
+  NotificationTemplateField _activeField = NotificationTemplateField.none;
 
   @override
   void dispose() {
     _schedTitleCtrl.dispose();
     _schedBodyCtrl.dispose();
+    _changeApprovedTitleCtrl.dispose();
+    _changeApprovedBodyCtrl.dispose();
+    _changeRejectedTitleCtrl.dispose();
+    _changeRejectedBodyCtrl.dispose();
     _schedTitleFocus.dispose();
     _schedBodyFocus.dispose();
+    _changeApprovedTitleFocus.dispose();
+    _changeApprovedBodyFocus.dispose();
+    _changeRejectedTitleFocus.dispose();
+    _changeRejectedBodyFocus.dispose();
     _currentPasswordCtrl.dispose();
     _newPasswordCtrl.dispose();
     _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
-  void _setActiveField(_ActiveScheduleField field) {
+  void _setActiveField(NotificationTemplateField field) {
     if (_activeField == field) return;
     setState(() => _activeField = field);
-  }
-
-  TextEditingController? _activeController() {
-    switch (_activeField) {
-      case _ActiveScheduleField.scheduleTitle:
-        return _schedTitleCtrl;
-      case _ActiveScheduleField.scheduleBody:
-        return _schedBodyCtrl;
-      case _ActiveScheduleField.none:
-        return null;
-    }
-  }
-
-  void _insertPlaceholder(String token) {
-    final ctrl = _activeController();
-    if (ctrl == null) return;
-
-    final text = ctrl.text;
-    final sel = ctrl.selection;
-    final start = sel.isValid ? sel.start : text.length;
-    final end = sel.isValid ? sel.end : text.length;
-    final safeStart = (start < 0 || start > text.length) ? text.length : start;
-    final safeEnd = (end < 0 || end > text.length) ? text.length : end;
-
-    final next = text.replaceRange(safeStart, safeEnd, token);
-    ctrl.value = ctrl.value.copyWith(
-      text: next,
-      selection: TextSelection.collapsed(offset: safeStart + token.length),
-      composing: TextRange.empty,
-    );
-    setState(() {});
-  }
-
-  void _useDefaultScheduleTitleTemplate() {
-    _schedTitleCtrl.text = _defaultScheduleUpdateTitleTemplate;
-    _schedTitleCtrl.selection = TextSelection.collapsed(
-      offset: _schedTitleCtrl.text.length,
-    );
-    _setActiveField(_ActiveScheduleField.scheduleTitle);
-    _schedTitleFocus.requestFocus();
-    setState(() {});
-  }
-
-  void _useDefaultScheduleBodyTemplate() {
-    _schedBodyCtrl.text = _defaultScheduleUpdateBodyTemplate;
-    _schedBodyCtrl.selection = TextSelection.collapsed(
-      offset: _schedBodyCtrl.text.length,
-    );
-    _setActiveField(_ActiveScheduleField.scheduleBody);
-    _schedBodyFocus.requestFocus();
-    setState(() {});
   }
 
   Future<void> _changePassword({
@@ -161,14 +121,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _copyPlaceholder(BuildContext context, String token) async {
-    await Clipboard.setData(ClipboardData(text: token));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied $token')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final loc = context.l10n;
@@ -182,8 +134,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _initialized = true;
       _enableAdminMessages = settings.enableAdminMessages;
       _enableScheduleUpdates = settings.enableScheduleUpdates;
+      _enableScheduleChangeReviews = settings.enableScheduleChangeReviews;
       _schedTitleCtrl.text = settings.scheduleUpdateTitleTemplate;
       _schedBodyCtrl.text = settings.scheduleUpdateBodyTemplate;
+      _changeApprovedTitleCtrl.text =
+          settings.scheduleChangeApprovedTitleTemplate;
+      _changeApprovedBodyCtrl.text = settings.scheduleChangeApprovedBodyTemplate;
+      _changeRejectedTitleCtrl.text =
+          settings.scheduleChangeRejectedTitleTemplate;
+      _changeRejectedBodyCtrl.text = settings.scheduleChangeRejectedBodyTemplate;
     }
 
     return Scaffold(
@@ -336,72 +295,99 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Enable schedule updates'),
                         subtitle: const Text(
-                          'Allows queuing schedule_update notifications when schedules are created/edited.',
+                          'Queues schedule_update notifications when schedules are created or edited.',
                         ),
                         value: _enableScheduleUpdates,
                         onChanged: (v) =>
                             setState(() => _enableScheduleUpdates = v),
                       ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      Text(
-                        'Schedule update templates (optional)',
-                        style: Theme.of(context).textTheme.titleSmall,
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable schedule change reviews'),
+                        subtitle: const Text(
+                          'Queues schedule_update notifications when change requests are approved or rejected.',
+                        ),
+                        value: _enableScheduleChangeReviews,
+                        onChanged: (v) =>
+                            setState(() => _enableScheduleChangeReviews = v),
                       ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      _PlaceholderBar(
+                      SizedBox(height: AppLayout.mediumGap(context)),
+                      NotificationTemplateEditor(
+                        sectionTitle: 'Schedule update templates (optional)',
+                        sectionSubtitle:
+                            'Used when creating or editing fighter schedules.',
+                        titleLabel: 'Schedule update title template',
+                        bodyLabel: 'Schedule update body template',
+                        titleHelper:
+                            'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName} {recurrence}',
+                        bodyHelper:
+                            'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName} {recurrence} {notes}',
+                        placeholderTokens:
+                            ScheduleNotificationPlaceholders.scheduleUpdate,
+                        titleController: _schedTitleCtrl,
+                        bodyController: _schedBodyCtrl,
+                        titleFieldKey: NotificationTemplateField.scheduleUpdateTitle,
+                        bodyFieldKey: NotificationTemplateField.scheduleUpdateBody,
+                        titleFocusNode: _schedTitleFocus,
+                        bodyFocusNode: _schedBodyFocus,
                         activeField: _activeField,
-                        onInsert: _insertPlaceholder,
-                        onCopy: (token) => _copyPlaceholder(context, token),
+                        onActiveFieldChanged: _setActiveField,
+                        defaultTitleTemplate:
+                            NotificationMessageComposer.defaultScheduleUpdateTitle,
+                        defaultBodyTemplate:
+                            NotificationMessageComposer.defaultScheduleUpdateBody,
                       ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      TextField(
-                        controller: _schedTitleCtrl,
-                        focusNode: _schedTitleFocus,
-                        onTap: () =>
-                            _setActiveField(_ActiveScheduleField.scheduleTitle),
-                        decoration: InputDecoration(
-                          labelText: 'Schedule update title template',
-                          helperText:
-                              'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName}',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: TextButton(
-                              onPressed: _useDefaultScheduleTitleTemplate,
-                              child: const Text('Use default'),
-                            ),
-                          ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minHeight: 40,
-                            minWidth: 110,
-                          ),
-                        ),
+                      SizedBox(height: AppLayout.sectionGap(context)),
+                      NotificationTemplateEditor(
+                        sectionTitle: 'Change request — approved',
+                        sectionSubtitle:
+                            'Sent to the fighter when you approve a schedule change request.',
+                        titleLabel: 'Approved title template',
+                        bodyLabel: 'Approved body template',
+                        titleHelper:
+                            'Placeholders: {fighterName} {requestType} {adminNotes} {date} {startTime} {endTime} {locationName} {proposedLocationText}',
+                        bodyHelper:
+                            'Placeholders: {fighterName} {requestType} {adminNotes} {date} {startTime} {endTime} {locationName} {proposedLocationText}',
+                        placeholderTokens:
+                            ScheduleNotificationPlaceholders.scheduleChangeReview,
+                        titleController: _changeApprovedTitleCtrl,
+                        bodyController: _changeApprovedBodyCtrl,
+                        titleFieldKey: NotificationTemplateField.changeApprovedTitle,
+                        bodyFieldKey: NotificationTemplateField.changeApprovedBody,
+                        titleFocusNode: _changeApprovedTitleFocus,
+                        bodyFocusNode: _changeApprovedBodyFocus,
+                        activeField: _activeField,
+                        onActiveFieldChanged: _setActiveField,
+                        defaultTitleTemplate: NotificationMessageComposer
+                            .defaultScheduleChangeApprovedTitle,
+                        defaultBodyTemplate: NotificationMessageComposer
+                            .defaultScheduleChangeApprovedBody,
                       ),
-                      SizedBox(height: AppLayout.smallGap(context)),
-                      TextField(
-                        controller: _schedBodyCtrl,
-                        focusNode: _schedBodyFocus,
-                        onTap: () =>
-                            _setActiveField(_ActiveScheduleField.scheduleBody),
-                        minLines: 3,
-                        maxLines: 6,
-                        decoration: InputDecoration(
-                          labelText: 'Schedule update body template',
-                          helperText:
-                              'Placeholders: {fighterName} {date} {startTime} {endTime} {locationName} {contactName} {notes}',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: TextButton(
-                              onPressed: _useDefaultScheduleBodyTemplate,
-                              child: const Text('Use default'),
-                            ),
-                          ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minHeight: 40,
-                            minWidth: 110,
-                          ),
-                        ),
+                      SizedBox(height: AppLayout.sectionGap(context)),
+                      NotificationTemplateEditor(
+                        sectionTitle: 'Change request — rejected',
+                        sectionSubtitle:
+                            'Sent to the fighter when you reject a schedule change request.',
+                        titleLabel: 'Rejected title template',
+                        bodyLabel: 'Rejected body template',
+                        titleHelper:
+                            'Placeholders: {fighterName} {requestType} {adminNotes} {date} {startTime} {endTime} {locationName} {proposedLocationText}',
+                        bodyHelper:
+                            'Placeholders: {fighterName} {requestType} {adminNotes} {date} {startTime} {endTime} {locationName} {proposedLocationText}',
+                        placeholderTokens:
+                            ScheduleNotificationPlaceholders.scheduleChangeReview,
+                        titleController: _changeRejectedTitleCtrl,
+                        bodyController: _changeRejectedBodyCtrl,
+                        titleFieldKey: NotificationTemplateField.changeRejectedTitle,
+                        bodyFieldKey: NotificationTemplateField.changeRejectedBody,
+                        titleFocusNode: _changeRejectedTitleFocus,
+                        bodyFocusNode: _changeRejectedBodyFocus,
+                        activeField: _activeField,
+                        onActiveFieldChanged: _setActiveField,
+                        defaultTitleTemplate: NotificationMessageComposer
+                            .defaultScheduleChangeRejectedTitle,
+                        defaultBodyTemplate: NotificationMessageComposer
+                            .defaultScheduleChangeRejectedBody,
                       ),
                       SizedBox(height: AppLayout.mediumGap(context)),
                       Row(
@@ -410,13 +396,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             onPressed: mutation.isSaving
                                 ? null
                                 : () async {
-                                    final next =
-                                        NotificationSettings.defaults().copyWith(
+                                    final base = settings ??
+                                        NotificationSettings.defaults();
+                                    final next = base.copyWith(
                                       enableAdminMessages: _enableAdminMessages,
                                       enableScheduleUpdates: _enableScheduleUpdates,
+                                      enableScheduleChangeReviews:
+                                          _enableScheduleChangeReviews,
                                       scheduleUpdateTitleTemplate:
                                           _schedTitleCtrl.text,
                                       scheduleUpdateBodyTemplate: _schedBodyCtrl.text,
+                                      scheduleChangeApprovedTitleTemplate:
+                                          _changeApprovedTitleCtrl.text,
+                                      scheduleChangeApprovedBodyTemplate:
+                                          _changeApprovedBodyCtrl.text,
+                                      scheduleChangeRejectedTitleTemplate:
+                                          _changeRejectedTitleCtrl.text,
+                                      scheduleChangeRejectedBodyTemplate:
+                                          _changeRejectedBodyCtrl.text,
                                     );
                                     await ref
                                         .read(
@@ -467,92 +464,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-enum _ActiveScheduleField {
-  none,
-  scheduleTitle,
-  scheduleBody,
-}
-
-class _PlaceholderBar extends StatelessWidget {
-  const _PlaceholderBar({
-    required this.activeField,
-    required this.onInsert,
-    required this.onCopy,
-  });
-
-  final _ActiveScheduleField activeField;
-  final ValueChanged<String> onInsert;
-  final ValueChanged<String> onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final tokens = const [
-      '{fighterName}',
-      '{date}',
-      '{startTime}',
-      '{endTime}',
-      '{locationName}',
-      '{contactName}',
-      '{notes}',
-    ];
-
-    final activeLabel = switch (activeField) {
-      _ActiveScheduleField.none =>
-        'Select a template field, then click a placeholder.',
-      _ActiveScheduleField.scheduleTitle =>
-        'Inserting into: Schedule update title',
-      _ActiveScheduleField.scheduleBody =>
-        'Inserting into: Schedule update body',
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            activeLabel,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: tokens.map((t) {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ActionChip(
-                    label: Text(t),
-                    onPressed: activeField == _ActiveScheduleField.none
-                        ? null
-                        : () => onInsert(t),
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    tooltip: 'Copy',
-                    onPressed: () => onCopy(t),
-                    icon: const Icon(Icons.copy, size: 18),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ],
       ),
     );
   }
