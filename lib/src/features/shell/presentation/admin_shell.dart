@@ -9,6 +9,7 @@ import '../../../core/localization/locale_controller.dart';
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../checkins/presentation/checkin_alert_listener.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({required this.child, super.key});
@@ -150,7 +151,7 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
         ),
-        body: child,
+        body: CheckinAlertListener(child: child),
       );
     }
 
@@ -190,7 +191,7 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: child),
+          Expanded(child: CheckinAlertListener(child: child)),
         ],
       ),
     );

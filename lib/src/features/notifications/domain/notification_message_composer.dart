@@ -35,6 +35,9 @@ class NotificationMessageComposer {
       'Your {requestType} request was rejected.\n'
       '{adminNotes}';
 
+  static const defaultFighterCheckinTitle = 'Check-in • {fighterName}';
+  static const defaultFighterCheckinBody = '{time} • {accuracy}';
+
   static NotificationMessage composeScheduleUpdate({
     required NotificationSettings settings,
     required String fighterName,

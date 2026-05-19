@@ -4,11 +4,15 @@ import admin from "firebase-admin";
 
 admin.initializeApp();
 
-type NotificationTarget = "broadcast" | "user";
+type NotificationTarget = "broadcast" | "user" | "admin";
 type NotificationStatus = "pending" | "processing" | "sent" | "failed";
+type NotificationType =
+  | "admin_message"
+  | "schedule_update"
+  | "fighter_checkin";
 
 type NotificationRequest = {
-  type: "admin_message" | "schedule_update";
+  type: NotificationType;
   title: string;
   body: string;
   target: NotificationTarget;
@@ -19,7 +23,82 @@ type NotificationRequest = {
   createdBy?: string;
 };
 
+type NotificationSettingsDoc = {
+  enableFighterCheckinAlerts?: boolean;
+  fighterCheckinTitleTemplate?: string;
+  fighterCheckinBodyTemplate?: string;
+};
+
 const db = admin.firestore();
+const META_DOC_ID = "_meta";
+
+const DEFAULT_FIGHTER_CHECKIN_TITLE = "Check-in • {fighterName}";
+const DEFAULT_FIGHTER_CHECKIN_BODY = "{time} • {accuracy}";
+
+export const onCheckinCreated = onDocumentCreated(
+  "checkins/{checkinId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const checkinId = event.params.checkinId;
+    if (checkinId === META_DOC_ID) return;
+
+    const data = snap.data() as Record<string, unknown> | undefined;
+    if (!data) return;
+
+    const fighterId = String(data.fighterId ?? "").trim();
+    if (!fighterId) {
+      logger.warn("Check-in missing fighterId", { checkinId });
+      return;
+    }
+
+    const settings = await loadNotificationSettings();
+    if (settings.enableFighterCheckinAlerts === false) {
+      return;
+    }
+
+    const fighterName = await loadFighterName(fighterId);
+    const time = formatCheckinTime(data);
+    const accuracy = formatAccuracy(data.accuracyMeters);
+    const label = String(data.label ?? "").trim();
+
+    const values: Record<string, string> = {
+      fighterName,
+      time,
+      accuracy,
+      label,
+    };
+
+    const title = applyTemplate(
+      settings.fighterCheckinTitleTemplate ?? "",
+      values,
+      DEFAULT_FIGHTER_CHECKIN_TITLE,
+    );
+    const body = applyTemplate(
+      settings.fighterCheckinBodyTemplate ?? "",
+      values,
+      buildDefaultCheckinBody(time, accuracy, label),
+    );
+
+    await db.collection("notifications").add({
+      type: "fighter_checkin",
+      title,
+      body,
+      target: "admin",
+      targetUserId: "",
+      data: {
+        screen: "checkins",
+        checkinId,
+        fighterId,
+      },
+      status: "pending",
+      createdBy: fighterId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  },
+);
 
 export const onNotificationCreated = onDocumentCreated(
   "notifications/{notificationId}",
@@ -31,7 +110,11 @@ export const onNotificationCreated = onDocumentCreated(
     const raw = snap.data() as Partial<NotificationRequest> | undefined;
     if (!raw) return;
 
-    if (raw.type !== "admin_message" && raw.type !== "schedule_update") {
+    if (
+      raw.type !== "admin_message" &&
+      raw.type !== "schedule_update" &&
+      raw.type !== "fighter_checkin"
+    ) {
       return;
     }
 
@@ -74,11 +157,16 @@ export const onNotificationCreated = onDocumentCreated(
     try {
       const targets = await resolveTargetUsers({ target, targetUserId });
       if (targets.length === 0) {
+        const noUsersMessage =
+          target === "user"
+            ? "Target user not found"
+            : target === "admin"
+              ? "No admin users found"
+              : "No users matched";
         await ref.set(
           {
             status: "failed",
-            errorMessage:
-              target === "user" ? "Target user not found" : "No users matched",
+            errorMessage: noUsersMessage,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -115,6 +203,7 @@ export const onNotificationCreated = onDocumentCreated(
         await cleanupInvalidTokens(t.uid, tokens, result.responses);
       }
 
+      // Mark sent even with zero tokens (in-app alerts still work via Firestore).
       await ref.set(
         {
           status: "sent",
@@ -149,6 +238,20 @@ async function resolveTargetUsers(input: {
   target: NotificationTarget;
   targetUserId: string;
 }): Promise<TargetUser[]> {
+  if (input.target === "admin") {
+    const snap = await db
+      .collection("users")
+      .where("role", "==", "admin")
+      .get();
+    return snap.docs.map((d) => {
+      const rawName = (d.get("fullName") as string | undefined) ?? "";
+      return {
+        uid: d.id,
+        fullName: rawName.trim() || "Admin",
+      };
+    });
+  }
+
   if (input.target === "user") {
     if (!input.targetUserId) return [];
     const snap = await db.collection("users").doc(input.targetUserId).get();
@@ -177,7 +280,6 @@ function applyUserPlaceholders(
   input: string,
   user: { uid: string; fullName: string },
 ): string {
-  // Keep this intentionally small and explicit.
   return input.replaceAll("{fighterName}", user.fullName);
 }
 
@@ -222,8 +324,73 @@ async function cleanupInvalidTokens(
   await batch.commit();
 }
 
+async function loadNotificationSettings(): Promise<NotificationSettingsDoc> {
+  const snap = await db.collection("settings").doc("notifications").get();
+  if (!snap.exists) return {};
+  return (snap.data() ?? {}) as NotificationSettingsDoc;
+}
+
+async function loadFighterName(fighterId: string): Promise<string> {
+  const snap = await db.collection("users").doc(fighterId).get();
+  if (!snap.exists) return "Fighter";
+  const rawName = (snap.get("fullName") as string | undefined) ?? "";
+  return rawName.trim() || "Fighter";
+}
+
+function formatCheckinTime(data: Record<string, unknown>): string {
+  const millis = data.timestampMillis;
+  if (typeof millis === "number" && millis > 0) {
+    return formatDateTime(new Date(millis));
+  }
+  const createdAt = data.createdAt;
+  if (createdAt instanceof admin.firestore.Timestamp) {
+    return formatDateTime(createdAt.toDate());
+  }
+  return formatDateTime(new Date());
+}
+
+function formatDateTime(dt: Date): string {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
+function formatAccuracy(raw: unknown): string {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return "accuracy unknown";
+  }
+  return `${Math.round(raw)}m accuracy`;
+}
+
+function buildDefaultCheckinBody(
+  time: string,
+  accuracy: string,
+  label: string,
+): string {
+  const parts = [time, accuracy];
+  if (label) {
+    parts.push(label);
+  }
+  return parts.join(" • ");
+}
+
+function applyTemplate(
+  template: string,
+  values: Record<string, string>,
+  fallback: string,
+): string {
+  const source = template.trim() || fallback;
+  let out = source;
+  for (const [key, value] of Object.entries(values)) {
+    out = out.replaceAll(`{${key}}`, value);
+  }
+  return out.trim();
+}
+
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
 }
-

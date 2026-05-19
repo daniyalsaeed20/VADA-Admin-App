@@ -7,6 +7,7 @@ import 'firebase_options.dart';
 import 'src/app.dart';
 import 'src/core/cache/shared_prefs_key_value_store.dart';
 import 'src/core/firebase/firebase_providers.dart';
+import 'src/core/notifications/local_notifications_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +41,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       );
 
       _store = await SharedPrefsKeyValueStore.create();
+      await LocalNotificationsService.instance.initialize();
     });
   }
 

@@ -11,6 +11,9 @@ class NotificationSettings {
     required this.scheduleChangeApprovedBodyTemplate,
     required this.scheduleChangeRejectedTitleTemplate,
     required this.scheduleChangeRejectedBodyTemplate,
+    required this.enableFighterCheckinAlerts,
+    required this.fighterCheckinTitleTemplate,
+    required this.fighterCheckinBodyTemplate,
     required this.updatedAt,
   });
 
@@ -23,6 +26,9 @@ class NotificationSettings {
   final String scheduleChangeApprovedBodyTemplate;
   final String scheduleChangeRejectedTitleTemplate;
   final String scheduleChangeRejectedBodyTemplate;
+  final bool enableFighterCheckinAlerts;
+  final String fighterCheckinTitleTemplate;
+  final String fighterCheckinBodyTemplate;
   final DateTime? updatedAt;
 
   factory NotificationSettings.defaults() {
@@ -36,6 +42,9 @@ class NotificationSettings {
       scheduleChangeApprovedBodyTemplate: '',
       scheduleChangeRejectedTitleTemplate: '',
       scheduleChangeRejectedBodyTemplate: '',
+      enableFighterCheckinAlerts: true,
+      fighterCheckinTitleTemplate: '',
+      fighterCheckinBodyTemplate: '',
       updatedAt: null,
     );
   }
@@ -61,6 +70,12 @@ class NotificationSettings {
           (data['scheduleChangeRejectedTitleTemplate'] as String? ?? '').trim(),
       scheduleChangeRejectedBodyTemplate:
           (data['scheduleChangeRejectedBodyTemplate'] as String? ?? '').trim(),
+      enableFighterCheckinAlerts:
+          (data['enableFighterCheckinAlerts'] as bool?) ?? true,
+      fighterCheckinTitleTemplate:
+          (data['fighterCheckinTitleTemplate'] as String? ?? '').trim(),
+      fighterCheckinBodyTemplate:
+          (data['fighterCheckinBodyTemplate'] as String? ?? '').trim(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -80,6 +95,9 @@ class NotificationSettings {
           scheduleChangeRejectedTitleTemplate.trim(),
       'scheduleChangeRejectedBodyTemplate':
           scheduleChangeRejectedBodyTemplate.trim(),
+      'enableFighterCheckinAlerts': enableFighterCheckinAlerts,
+      'fighterCheckinTitleTemplate': fighterCheckinTitleTemplate.trim(),
+      'fighterCheckinBodyTemplate': fighterCheckinBodyTemplate.trim(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -94,6 +112,9 @@ class NotificationSettings {
     String? scheduleChangeApprovedBodyTemplate,
     String? scheduleChangeRejectedTitleTemplate,
     String? scheduleChangeRejectedBodyTemplate,
+    bool? enableFighterCheckinAlerts,
+    String? fighterCheckinTitleTemplate,
+    String? fighterCheckinBodyTemplate,
   }) {
     return NotificationSettings(
       enableAdminMessages: enableAdminMessages ?? this.enableAdminMessages,
@@ -112,6 +133,12 @@ class NotificationSettings {
           this.scheduleChangeRejectedTitleTemplate,
       scheduleChangeRejectedBodyTemplate: scheduleChangeRejectedBodyTemplate ??
           this.scheduleChangeRejectedBodyTemplate,
+      enableFighterCheckinAlerts:
+          enableFighterCheckinAlerts ?? this.enableFighterCheckinAlerts,
+      fighterCheckinTitleTemplate:
+          fighterCheckinTitleTemplate ?? this.fighterCheckinTitleTemplate,
+      fighterCheckinBodyTemplate:
+          fighterCheckinBodyTemplate ?? this.fighterCheckinBodyTemplate,
       updatedAt: updatedAt,
     );
   }

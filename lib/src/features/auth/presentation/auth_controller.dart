@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
+import '../../../core/audio/checkin_alert_tone.dart';
+import '../../../core/notifications/local_notifications_service.dart';
 import '../data/auth_repository.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -69,6 +71,8 @@ class LoginFormController extends StateNotifier<LoginFormState> {
         );
         return false;
       }
+      await LocalNotificationsService.instance.requestPermissions();
+      await primeCheckinAlertTone();
       state = state.copyWith(isLoading: false, clearError: true);
       return true;
     } on FirebaseAuthException {

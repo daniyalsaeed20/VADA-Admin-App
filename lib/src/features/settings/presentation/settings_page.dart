@@ -44,6 +44,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _enableAdminMessages = true;
   bool _enableScheduleUpdates = true;
   bool _enableScheduleChangeReviews = true;
+  bool _enableFighterCheckinAlerts = true;
   NotificationTemplateField _activeField = NotificationTemplateField.none;
 
   @override
@@ -135,6 +136,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _enableAdminMessages = settings.enableAdminMessages;
       _enableScheduleUpdates = settings.enableScheduleUpdates;
       _enableScheduleChangeReviews = settings.enableScheduleChangeReviews;
+      _enableFighterCheckinAlerts = settings.enableFighterCheckinAlerts;
       _schedTitleCtrl.text = settings.scheduleUpdateTitleTemplate;
       _schedBodyCtrl.text = settings.scheduleUpdateBodyTemplate;
       _changeApprovedTitleCtrl.text =
@@ -311,6 +313,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         onChanged: (v) =>
                             setState(() => _enableScheduleChangeReviews = v),
                       ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Enable fighter check-in alerts'),
+                        subtitle: const Text(
+                          'Shows a dialog, alert sound, and browser notification when a fighter checks in.',
+                        ),
+                        value: _enableFighterCheckinAlerts,
+                        onChanged: (v) =>
+                            setState(() => _enableFighterCheckinAlerts = v),
+                      ),
                       SizedBox(height: AppLayout.mediumGap(context)),
                       NotificationTemplateEditor(
                         sectionTitle: 'Schedule update templates (optional)',
@@ -403,6 +415,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       enableScheduleUpdates: _enableScheduleUpdates,
                                       enableScheduleChangeReviews:
                                           _enableScheduleChangeReviews,
+                                      enableFighterCheckinAlerts:
+                                          _enableFighterCheckinAlerts,
                                       scheduleUpdateTitleTemplate:
                                           _schedTitleCtrl.text,
                                       scheduleUpdateBodyTemplate: _schedBodyCtrl.text,

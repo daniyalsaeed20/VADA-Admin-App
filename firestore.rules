@@ -205,11 +205,15 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    function fighterCanReadNotification() {
+      return isFighter()
+          && resource.data.type in ['admin_message', 'schedule_update']
+          && (resource.data.target == 'broadcast'
+              || resource.data.targetUserId == request.auth.uid);
+    }
+
     match /notifications/{docId} {
-      allow read: if isAdmin()
-          || (isFighter()
-              && (resource.data.target == 'broadcast'
-                  || resource.data.targetUserId == request.auth.uid));
+      allow read: if isAdmin() || fighterCanReadNotification();
 
       allow write: if isAdmin();
     }
