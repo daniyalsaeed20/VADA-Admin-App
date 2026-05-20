@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/localization/localization_x.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
@@ -54,9 +55,29 @@ class _ScheduleChangeRequestsPageState
   int _page = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onFiltersChanged);
+  }
+
+  @override
   void dispose() {
+    _searchController.removeListener(_onFiltersChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onFiltersChanged() => setState(() => _page = 0);
+
+  void _clearFilters() {
+    setState(() {
+      _statusFilter = _StatusFilter.pending;
+      _typeFilter = null;
+      _fighterFilterId = null;
+      _dateRange = _DateRangeFilter.all;
+      _page = 0;
+    });
+    _searchController.clear();
   }
 
   @override
@@ -118,81 +139,72 @@ class _ScheduleChangeRequestsPageState
                   ],
                 ),
               ),
-              error: (err, st) => const Center(
-                child: Text('Could not load schedule change requests.'),
+              error: (err, st) => Center(
+                child: _RequestsSurface(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        SizedBox(height: AppLayout.smallGap(context)),
+                        Text(loc.tr('scheduleRequests.error')),
+                        SizedBox(height: AppLayout.smallGap(context)),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              ref.refresh(scheduleChangeRequestsStreamProvider),
+                          icon: const Icon(Icons.refresh),
+                          label: Text(loc.tr('common.retry')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
               data: (requests) {
                 final pendingCount = requests
                     .where((r) => r.status == ScheduleChangeRequestStatus.pending)
                     .length;
+                final approvedCount = requests
+                    .where((r) => r.status == ScheduleChangeRequestStatus.approved)
+                    .length;
+                final rejectedCount = requests
+                    .where((r) => r.status == ScheduleChangeRequestStatus.rejected)
+                    .length;
                 final filtered = _filterRequests(requests, fighterNameById);
 
                 if (requests.isEmpty) {
-                  return const Center(
-                    child: Text('No schedule change requests yet.'),
+                  return _EmptyRequestsState(
+                    message: loc.tr('scheduleRequests.empty'),
                   );
                 }
 
-                if (filtered.isEmpty) {
-                  return Column(
-                    children: [
-                      _PendingBanner(pendingCount: pendingCount),
-                      SizedBox(height: AppLayout.mediumGap(context)),
-                      _FiltersBar(
-                        searchController: _searchController,
-                        statusFilter: _statusFilter,
-                        onStatusFilterChanged: (value) =>
-                            setState(() {
-                          _statusFilter = value;
-                          _page = 0;
-                        }),
-                        typeFilter: _typeFilter,
-                        onTypeFilterChanged: (value) =>
-                            setState(() {
-                          _typeFilter = value;
-                          _page = 0;
-                        }),
-                        fighterFilterId: _fighterFilterId,
-                        fighters: fighters,
-                        onFighterFilterChanged: (value) =>
-                            setState(() {
-                          _fighterFilterId = value;
-                          _page = 0;
-                        }),
-                        dateRange: _dateRange,
-                        onDateRangeChanged: (value) =>
-                            setState(() {
-                          _dateRange = value;
-                          _page = 0;
-                        }),
-                        onSearchChanged: (_) => setState(() => _page = 0),
-                      ),
-                      const Expanded(
-                        child: Center(
-                          child: Text('No requests match current filters.'),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                final totalPages = math.max(
-                  1,
-                  (filtered.length / _rowsPerPage).ceil(),
-                );
+                final totalPages =
+                    math.max(1, (filtered.length / _rowsPerPage).ceil());
                 final currentPage = _page.clamp(0, totalPages - 1).toInt();
-                final startIndex = currentPage * _rowsPerPage;
-                final endIndex = math.min(
-                  startIndex + _rowsPerPage,
-                  filtered.length,
-                );
-                final pageItems = filtered.sublist(startIndex, endIndex);
+                final startIndex =
+                    filtered.isEmpty ? 0 : currentPage * _rowsPerPage;
+                final endIndex = filtered.isEmpty
+                    ? 0
+                    : math.min(startIndex + _rowsPerPage, filtered.length);
+                final pageItems = filtered.isEmpty
+                    ? const <ScheduleChangeRequest>[]
+                    : filtered.sublist(startIndex, endIndex);
 
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _PendingBanner(pendingCount: pendingCount),
+                    _RequestsSummaryRow(
+                      pendingCount: pendingCount,
+                      approvedCount: approvedCount,
+                      rejectedCount: rejectedCount,
+                      totalCount: requests.length,
+                    ),
                     SizedBox(height: AppLayout.mediumGap(context)),
-                    _FiltersBar(
+                    _RequestsFiltersCard(
                       searchController: _searchController,
                       statusFilter: _statusFilter,
                       onStatusFilterChanged: (value) => setState(() {
@@ -215,121 +227,51 @@ class _ScheduleChangeRequestsPageState
                         _dateRange = value;
                         _page = 0;
                       }),
-                      onSearchChanged: (_) => setState(() => _page = 0),
                     ),
                     SizedBox(height: AppLayout.mediumGap(context)),
                     Expanded(
-                      child: isNarrow
-                          ? ListView.separated(
-                              itemCount: pageItems.length,
-                              separatorBuilder: (context, _) =>
-                                  SizedBox(height: AppLayout.smallGap(context)),
-                              itemBuilder: (context, index) {
-                                final item = pageItems[index];
-                                return _RequestCard(
-                                  request: item,
-                                  fighterName: fighterNameById[item.fighterId] ??
-                                      item.fighterId,
-                                  onTap: () => _openDetail(
-                                    request: item,
-                                    fighter: fighterById[item.fighterId],
-                                  ),
-                                );
-                              },
-                            )
-                          : SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: SingleChildScrollView(
-                                child: DataTable(
-                                  columnSpacing: 20,
-                                  horizontalMargin: 12,
-                                columns: const [
-                                  DataColumn(label: Text('Fighter')),
-                                  DataColumn(label: Text('Type')),
-                                  DataColumn(label: Text('Status')),
-                                  DataColumn(label: Text('Submitted')),
-                                  DataColumn(label: Text('Notes')),
-                                  DataColumn(label: Text('Schedule')),
-                                  DataColumn(label: Text('')),
-                                ],
-                                rows: pageItems.map((item) {
-                                  final fighterName =
-                                      fighterNameById[item.fighterId] ??
-                                          item.fighterId;
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(
-                                        SizedBox(
-                                          width: 180,
-                                          child: Text(
-                                            fighterName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(Text(item.requestTypeLabel)),
-                                      DataCell(_StatusBadge(request: item)),
-                                      DataCell(
-                                        Text(_formatDate(item.createdAt)),
-                                      ),
-                                      DataCell(
-                                        SizedBox(
-                                          width: 200,
-                                          child: Text(
-                                            item.notesPreview,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          item.schedulePreviewFromSnapshot() ??
-                                              (item.scheduleId ?? '—'),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      DataCell(
-                                        TextButton(
-                                          onPressed: mutation.isLoading
-                                              ? null
-                                              : () => _openDetail(
-                                                    request: item,
-                                                    fighter:
-                                                        fighterById[item.fighterId],
-                                                  ),
-                                          child: const Text('Review'),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }).toList(),
+                      child: filtered.isEmpty
+                          ? _NoResultsState(onClearFilters: _clearFilters)
+                          : isNarrow
+                              ? _ScheduleRequestsMobileList(
+                                  requests: pageItems,
+                                  fighterNameById: fighterNameById,
+                                  fighterById: fighterById,
+                                  mutationLoading: mutation.isLoading,
+                                  onReview: _openDetail,
+                                  formatDate: _formatDate,
+                                )
+                              : _ScheduleRequestsTable(
+                                  requests: pageItems,
+                                  fighterNameById: fighterNameById,
+                                  fighterById: fighterById,
+                                  mutationLoading: mutation.isLoading,
+                                  onReview: _openDetail,
+                                  formatDate: _formatDate,
                                 ),
-                              ),
-                            ),
                     ),
-                    SizedBox(height: AppLayout.smallGap(context)),
-                    _Pagination(
-                      rowsPerPage: _rowsPerPage,
-                      rowsPerPageOptions: _rowsPerPageOptions,
-                      startIndex: startIndex,
-                      endIndex: endIndex,
-                      totalCount: filtered.length,
-                      currentPage: currentPage,
-                      totalPages: totalPages,
-                      onRowsPerPageChanged: (value) => setState(() {
-                        _rowsPerPage = value;
-                        _page = 0;
-                      }),
-                      onPreviousPage: currentPage == 0
-                          ? null
-                          : () => setState(() => _page = currentPage - 1),
-                      onNextPage: currentPage >= totalPages - 1
-                          ? null
-                          : () => setState(() => _page = currentPage + 1),
-                    ),
+                    if (filtered.isNotEmpty) ...[
+                      SizedBox(height: AppLayout.smallGap(context)),
+                      _ScheduleRequestsPagination(
+                        rowsPerPage: _rowsPerPage,
+                        rowsPerPageOptions: _rowsPerPageOptions,
+                        startIndex: startIndex,
+                        endIndex: endIndex,
+                        totalCount: filtered.length,
+                        currentPage: currentPage,
+                        totalPages: totalPages,
+                        onRowsPerPageChanged: (value) => setState(() {
+                          _rowsPerPage = value;
+                          _page = 0;
+                        }),
+                        onPreviousPage: currentPage == 0
+                            ? null
+                            : () => setState(() => _page = currentPage - 1),
+                        onNextPage: currentPage >= totalPages - 1
+                            ? null
+                            : () => setState(() => _page = currentPage + 1),
+                      ),
+                    ],
                   ],
                 );
               },
@@ -345,7 +287,7 @@ class _ScheduleChangeRequestsPageState
     Map<String, String> fighterNameById,
   ) {
     final query = _searchController.text.trim().toLowerCase();
-    return items.where((item) {
+    final filtered = items.where((item) {
       if (!_statusFilter.matches(item.status)) {
         return false;
       }
@@ -371,6 +313,13 @@ class _ScheduleChangeRequestsPageState
           item.requestTypeLabel.toLowerCase().contains(query) ||
           summary.contains(query);
     }).toList();
+
+    filtered.sort((a, b) {
+      final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return filtered;
   }
 
   void _openDetail({
@@ -439,47 +388,170 @@ enum _DateRangeFilter {
   }
 }
 
-class _PendingBanner extends StatelessWidget {
-  const _PendingBanner({required this.pendingCount});
+class _RequestsSurface extends StatelessWidget {
+  const _RequestsSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _RequestsSummaryRow extends StatelessWidget {
+  const _RequestsSummaryRow({
+    required this.pendingCount,
+    required this.approvedCount,
+    required this.rejectedCount,
+    required this.totalCount,
+  });
 
   final int pendingCount;
+  final int approvedCount;
+  final int rejectedCount;
+  final int totalCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 720;
+        final cards = [
+          _SummaryCard(
+            label: loc.tr('scheduleRequests.summaryPending'),
+            value: '$pendingCount',
+            icon: Icons.pending_actions_outlined,
+            accent: Colors.orange.shade800,
+            highlight: pendingCount > 0,
+          ),
+          _SummaryCard(
+            label: loc.tr('scheduleRequests.summaryApproved'),
+            value: '$approvedCount',
+            icon: Icons.check_circle_outline,
+            accent: AppColors.success,
+          ),
+          _SummaryCard(
+            label: loc.tr('scheduleRequests.summaryRejected'),
+            value: '$rejectedCount',
+            icon: Icons.cancel_outlined,
+            accent: Theme.of(context).colorScheme.error,
+          ),
+          _SummaryCard(
+            label: loc.tr('scheduleRequests.summaryTotal'),
+            value: '$totalCount',
+            icon: Icons.inbox_outlined,
+            accent: Theme.of(context).colorScheme.primary,
+          ),
+        ];
+        if (isNarrow) {
+          return SizedBox(
+            height: 76,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: cards.length,
+              separatorBuilder: (_, _) =>
+                  SizedBox(width: AppLayout.smallGap(context)),
+              itemBuilder: (context, index) => SizedBox(
+                width: 132,
+                child: cards[index],
+              ),
+            ),
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) SizedBox(width: AppLayout.mediumGap(context)),
+              Expanded(child: cards[i]),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+    this.highlight = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(AppLayout.cardPadding(context)),
-      decoration: BoxDecoration(
-        color: pendingCount > 0
-            ? scheme.primaryContainer.withValues(alpha: 0.5)
-            : scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            pendingCount > 0 ? Icons.pending_actions : Icons.check_circle_outline,
-            color: scheme.primary,
-          ),
-          SizedBox(width: AppLayout.smallGap(context)),
-          Expanded(
-            child: Text(
-              pendingCount > 0
-                  ? '$pendingCount pending request${pendingCount == 1 ? '' : 's'} need review.'
-                  : 'No pending requests — you are caught up.',
-              style: Theme.of(context).textTheme.bodyMedium,
+    final isCompact = MediaQuery.sizeOf(context).width < 720;
+    return _RequestsSurface(
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: AppLayout.cardPadding(context),
+          vertical: isCompact ? 10 : AppLayout.cardPadding(context),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: isCompact ? 32 : 40,
+              height: isCompact ? 32 : 40,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: accent, size: isCompact ? 18 : 22),
             ),
-          ),
-        ],
+            SizedBox(width: AppLayout.smallGap(context)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                  Text(
+                    value,
+                    style: (isCompact
+                            ? Theme.of(context).textTheme.titleLarge
+                            : Theme.of(context).textTheme.headlineSmall)
+                        ?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: highlight ? accent : null,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _FiltersBar extends StatelessWidget {
-  const _FiltersBar({
+class _RequestsFiltersCard extends StatelessWidget {
+  const _RequestsFiltersCard({
     required this.searchController,
     required this.statusFilter,
     required this.onStatusFilterChanged,
@@ -490,7 +562,6 @@ class _FiltersBar extends StatelessWidget {
     required this.onFighterFilterChanged,
     required this.dateRange,
     required this.onDateRangeChanged,
-    required this.onSearchChanged,
   });
 
   final TextEditingController searchController;
@@ -503,135 +574,437 @@ class _FiltersBar extends StatelessWidget {
   final ValueChanged<String?> onFighterFilterChanged;
   final _DateRangeFilter dateRange;
   final ValueChanged<_DateRangeFilter> onDateRangeChanged;
-  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: AppLayout.mediumGap(context),
-      runSpacing: AppLayout.smallGap(context),
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        SizedBox(
-          width: 280,
-          child: TextField(
-            controller: searchController,
-            decoration: const InputDecoration(
-              labelText: 'Search fighter or notes',
-              prefixIcon: Icon(Icons.search),
-              isDense: true,
+    final loc = context.l10n;
+    final isCompact = MediaQuery.sizeOf(context).width < 720;
+
+    Widget advancedFilters() {
+      return Wrap(
+        spacing: AppLayout.mediumGap(context),
+        runSpacing: AppLayout.smallGap(context),
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: isCompact ? double.infinity : 220,
+            child: DropdownButtonFormField<ScheduleChangeRequestType?>(
+              key: ValueKey('type-$typeFilter'),
+              initialValue: typeFilter,
+              decoration: InputDecoration(
+                labelText: loc.tr('scheduleRequests.filterType'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                DropdownMenuItem<ScheduleChangeRequestType?>(
+                  value: null,
+                  child: Text(loc.tr('scheduleRequests.allTypes')),
+                ),
+                ...ScheduleChangeRequestType.values.map(
+                  (type) => DropdownMenuItem(
+                    value: type,
+                    child: Text(type.label),
+                  ),
+                ),
+              ],
+              onChanged: onTypeFilterChanged,
             ),
-            onChanged: onSearchChanged,
           ),
-        ),
-        DropdownButton<_StatusFilter>(
-          value: statusFilter,
-          items: _StatusFilter.values
-              .map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text(value.label),
+          SizedBox(
+            width: isCompact ? double.infinity : 220,
+            child: DropdownButtonFormField<String?>(
+              key: ValueKey('fighter-$fighterFilterId'),
+              initialValue: fighterFilterId,
+              decoration: InputDecoration(
+                labelText: loc.tr('scheduleRequests.filterFighter'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(loc.tr('scheduleRequests.allFighters')),
                 ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              onStatusFilterChanged(value);
-            }
-          },
-        ),
-        DropdownButton<ScheduleChangeRequestType?>(
-          value: typeFilter,
-          hint: const Text('All types'),
-          items: [
-            const DropdownMenuItem<ScheduleChangeRequestType?>(
-              value: null,
-              child: Text('All types'),
+                ...fighters.map(
+                  (fighter) => DropdownMenuItem(
+                    value: fighter.uid,
+                    child: Text(fighter.fullName),
+                  ),
+                ),
+              ],
+              onChanged: onFighterFilterChanged,
             ),
-            ...ScheduleChangeRequestType.values.map(
-              (type) => DropdownMenuItem(
-                value: type,
-                child: Text(type.label),
+          ),
+          SizedBox(
+            width: isCompact ? double.infinity : 180,
+            child: DropdownButtonFormField<_DateRangeFilter>(
+              key: ValueKey('date-$dateRange'),
+              initialValue: dateRange,
+              decoration: InputDecoration(
+                labelText: loc.tr('scheduleRequests.filterDate'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              items: _DateRangeFilter.values
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  onDateRangeChanged(value);
+                }
+              },
+            ),
+          ),
+        ],
+      );
+    }
+
+    return _RequestsSurface(
+      child: Padding(
+        padding: EdgeInsets.all(AppLayout.cardPadding(context)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: searchController,
+              decoration: InputDecoration(
+                labelText: loc.tr('scheduleRequests.search'),
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                border: const OutlineInputBorder(),
               ),
             ),
-          ],
-          onChanged: onTypeFilterChanged,
-        ),
-        DropdownButton<String?>(
-          value: fighterFilterId,
-          hint: const Text('All fighters'),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('All fighters'),
+            SizedBox(height: AppLayout.smallGap(context)),
+            Text(
+              loc.tr('scheduleRequests.filterStatus'),
+              style: Theme.of(context).textTheme.labelLarge,
             ),
-            ...fighters.map(
-              (fighter) => DropdownMenuItem(
-                value: fighter.uid,
-                child: Text(fighter.fullName),
-              ),
+            SizedBox(height: AppLayout.smallGap(context)),
+            Wrap(
+              spacing: AppLayout.smallGap(context),
+              runSpacing: AppLayout.smallGap(context),
+              children: _StatusFilter.values.map((filter) {
+                return FilterChip(
+                  label: Text(filter.label),
+                  selected: statusFilter == filter,
+                  onSelected: (_) => onStatusFilterChanged(filter),
+                );
+              }).toList(),
             ),
-          ],
-          onChanged: onFighterFilterChanged,
-        ),
-        DropdownButton<_DateRangeFilter>(
-          value: dateRange,
-          items: _DateRangeFilter.values
-              .map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text(value.label),
+            if (isCompact) ...[
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.only(
+                    top: AppLayout.smallGap(context),
+                  ),
+                  title: Text(
+                    loc.tr('scheduleRequests.moreFilters'),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  children: [advancedFilters()],
                 ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              onDateRangeChanged(value);
-            }
-          },
+              ),
+            ] else ...[
+              SizedBox(height: AppLayout.mediumGap(context)),
+              advancedFilters(),
+            ],
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _RequestCard extends StatelessWidget {
-  const _RequestCard({
-    required this.request,
-    required this.fighterName,
-    required this.onTap,
-  });
+class _EmptyRequestsState extends StatelessWidget {
+  const _EmptyRequestsState({required this.message});
 
-  final ScheduleChangeRequest request;
-  final String fighterName;
-  final VoidCallback onTap;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        title: Text(fighterName),
-        subtitle: Text(
-          [
-            '${request.requestTypeLabel} • ${_formatDate(request.createdAt)}',
-            if (request.changeSummary.trim().isNotEmpty) request.changeSummary,
-            if (request.notes.trim().isNotEmpty) request.notesPreview,
-          ].join('\n'),
-          maxLines: 4,
-          overflow: TextOverflow.ellipsis,
+    return Center(
+      child: _RequestsSurface(
+        child: Padding(
+          padding: EdgeInsets.all(AppLayout.cardPadding(context) * 1.5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.inbox_outlined, size: 36),
+              SizedBox(height: AppLayout.smallGap(context)),
+              Text(message, textAlign: TextAlign.center),
+            ],
+          ),
         ),
-        isThreeLine: true,
-        trailing: _StatusBadge(request: request),
       ),
     );
   }
+}
 
-  String _formatDate(DateTime? value) {
-    if (value == null) {
-      return '—';
-    }
-    return DateFormat('yyyy-MM-dd HH:mm').format(value.toLocal());
+class _NoResultsState extends StatelessWidget {
+  const _NoResultsState({required this.onClearFilters});
+
+  final VoidCallback onClearFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    return Center(
+      child: _RequestsSurface(
+        child: Padding(
+          padding: EdgeInsets.all(AppLayout.cardPadding(context) * 1.5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_off_outlined, size: 36),
+              SizedBox(height: AppLayout.smallGap(context)),
+              Text(loc.tr('scheduleRequests.noResults')),
+              SizedBox(height: AppLayout.mediumGap(context)),
+              OutlinedButton.icon(
+                onPressed: onClearFilters,
+                icon: const Icon(Icons.clear),
+                label: Text(loc.tr('scheduleRequests.clearFilters')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScheduleRequestsMobileList extends StatelessWidget {
+  const _ScheduleRequestsMobileList({
+    required this.requests,
+    required this.fighterNameById,
+    required this.fighterById,
+    required this.mutationLoading,
+    required this.onReview,
+    required this.formatDate,
+  });
+
+  final List<ScheduleChangeRequest> requests;
+  final Map<String, String> fighterNameById;
+  final Map<String, Fighter> fighterById;
+  final bool mutationLoading;
+  final void Function({
+    required ScheduleChangeRequest request,
+    required Fighter? fighter,
+  }) onReview;
+  final String Function(DateTime? value) formatDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: requests.length,
+      separatorBuilder: (_, _) => SizedBox(height: AppLayout.smallGap(context)),
+      itemBuilder: (context, index) {
+        final item = requests[index];
+        final fighterName =
+            fighterNameById[item.fighterId] ?? item.fighterId;
+        final loc = context.l10n;
+        return _RequestsSurface(
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppLayout.cardPadding(context),
+              vertical: AppLayout.mediumGap(context),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fighterName,
+                        style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: AppLayout.smallGap(context) * 0.5),
+                      Text(
+                        '${item.requestTypeLabel} • ${formatDate(item.createdAt)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: AppLayout.smallGap(context)),
+                _StatusBadge(request: item),
+                SizedBox(width: AppLayout.smallGap(context)),
+                FilledButton.tonal(
+                  onPressed: mutationLoading
+                      ? null
+                      : () => onReview(
+                            request: item,
+                            fighter: fighterById[item.fighterId],
+                          ),
+                  child: Text(loc.tr('scheduleRequests.review')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ScheduleRequestsTable extends StatefulWidget {
+  const _ScheduleRequestsTable({
+    required this.requests,
+    required this.fighterNameById,
+    required this.fighterById,
+    required this.mutationLoading,
+    required this.onReview,
+    required this.formatDate,
+  });
+
+  final List<ScheduleChangeRequest> requests;
+  final Map<String, String> fighterNameById;
+  final Map<String, Fighter> fighterById;
+  final bool mutationLoading;
+  final void Function({
+    required ScheduleChangeRequest request,
+    required Fighter? fighter,
+  }) onReview;
+  final String Function(DateTime? value) formatDate;
+
+  @override
+  State<_ScheduleRequestsTable> createState() => _ScheduleRequestsTableState();
+}
+
+class _ScheduleRequestsTableState extends State<_ScheduleRequestsTable> {
+  late final ScrollController _horizontalController;
+  late final ScrollController _verticalController;
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontalController = ScrollController();
+    _verticalController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _horizontalController.dispose();
+    _verticalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    return _RequestsSurface(
+      child: LayoutBuilder(
+        builder: (context, constraints) => Scrollbar(
+          controller: _horizontalController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _horizontalController,
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Scrollbar(
+                controller: _verticalController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _verticalController,
+                  child: DataTable(
+                    showCheckboxColumn: false,
+                    headingRowColor: WidgetStatePropertyAll(
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
+                    dataRowMinHeight: 62,
+                    dataRowMaxHeight: 80,
+                    columnSpacing: AppLayout.largeGap(context),
+                    horizontalMargin: AppLayout.cardPadding(context),
+                    columns: [
+                      DataColumn(label: Text(loc.tr('scheduleRequests.colFighter'))),
+                      DataColumn(label: Text(loc.tr('scheduleRequests.colType'))),
+                      DataColumn(label: Text(loc.tr('scheduleRequests.colStatus'))),
+                      DataColumn(label: Text(loc.tr('scheduleRequests.colSubmitted'))),
+                      DataColumn(label: Text(loc.tr('scheduleRequests.colActions'))),
+                    ],
+                    rows: widget.requests.map((item) {
+                      final fighterName =
+                          widget.fighterNameById[item.fighterId] ??
+                              item.fighterId;
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            SizedBox(
+                              width: 180,
+                              child: Text(
+                                fighterName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          DataCell(_TypeChip(label: item.requestTypeLabel)),
+                          DataCell(_StatusBadge(request: item)),
+                          DataCell(Text(widget.formatDate(item.createdAt))),
+                          DataCell(
+                            FilledButton.tonal(
+                              onPressed: widget.mutationLoading
+                                  ? null
+                                  : () => widget.onReview(
+                                        request: item,
+                                        fighter:
+                                            widget.fighterById[item.fighterId],
+                                      ),
+                              child: Text(loc.tr('scheduleRequests.review')),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TypeChip extends StatelessWidget {
+  const _TypeChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.chipBorder),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
+    );
   }
 }
 
@@ -1200,8 +1573,8 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _Pagination extends StatelessWidget {
-  const _Pagination({
+class _ScheduleRequestsPagination extends StatelessWidget {
+  const _ScheduleRequestsPagination({
     required this.rowsPerPage,
     required this.rowsPerPageOptions,
     required this.startIndex,
@@ -1227,43 +1600,75 @@ class _Pagination extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: AppLayout.mediumGap(context),
-      children: [
-        DropdownButton<int>(
-          value: rowsPerPage,
-          onChanged: (value) {
-            if (value != null) {
-              onRowsPerPageChanged(value);
-            }
-          },
-          items: rowsPerPageOptions
-              .map(
-                (option) => DropdownMenuItem<int>(
-                  value: option,
-                  child: Text(option.toString()),
-                ),
-              )
-              .toList(),
+    final loc = context.l10n;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: AppLayout.smallGap(context)),
+      child: _RequestsSurface(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppLayout.cardPadding(context),
+            vertical: AppLayout.smallGap(context),
+          ),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppLayout.mediumGap(context),
+            runSpacing: AppLayout.smallGap(context),
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    loc.tr('scheduleRequests.rowsPerPage'),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  SizedBox(width: AppLayout.smallGap(context)),
+                  DropdownButton<int>(
+                    value: rowsPerPage,
+                    onChanged: (value) {
+                      if (value != null) {
+                        onRowsPerPageChanged(value);
+                      }
+                    },
+                    items: rowsPerPageOptions
+                        .map(
+                          (option) => DropdownMenuItem<int>(
+                            value: option,
+                            child: Text(option.toString()),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
+              Text(
+                totalCount == 0
+                    ? '0'
+                    : '${startIndex + 1}-$endIndex / $totalCount',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: loc.tr('scheduleRequests.previousPage'),
+                    onPressed: onPreviousPage,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Text('${currentPage + 1}/$totalPages'),
+                  IconButton(
+                    tooltip: loc.tr('scheduleRequests.nextPage'),
+                    onPressed: onNextPage,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        Text(totalCount == 0 ? '0' : '${startIndex + 1}-$endIndex / $totalCount'),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              onPressed: onPreviousPage,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text('${currentPage + 1}/$totalPages'),
-            IconButton(
-              onPressed: onNextPage,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
