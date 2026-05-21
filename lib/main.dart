@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,43 +25,52 @@ class _BootstrapApp extends StatefulWidget {
 }
 
 class _BootstrapAppState extends State<_BootstrapApp> {
-  late Future<void> _initialization;
-  late final SharedPrefsKeyValueStore _store;
+  late Future<SharedPrefsKeyValueStore> _initialization;
 
   @override
   void initState() {
     super.initState();
-    _initialization = _initializeFirebase();
+    _initialization = _startInitialization();
   }
 
-  Future<void> _initializeFirebase() {
-    return Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).then((_) async {
-      // Firestore offline cache for previously loaded data.
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true,
-      );
+  Future<SharedPrefsKeyValueStore> _startInitialization() {
+    return _initializeApp().timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        throw TimeoutException(
+          'App initialization timed out after 30 seconds.',
+        );
+      },
+    );
+  }
 
-      _store = await SharedPrefsKeyValueStore.create();
-      await LocalNotificationsService.instance.initialize();
-    });
+  Future<SharedPrefsKeyValueStore> _initializeApp() async {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Offline persistence is enabled by default on web; assigning settings here
+    // can hang in production without throwing (IndexedDB / multi-tab issues).
+    if (!kIsWeb) {
+      try {
+        FirebaseFirestore.instance.settings = const Settings(
+          persistenceEnabled: true,
+        );
+      } catch (_) {
+        // Non-fatal — app works without offline cache.
+      }
+    }
+
+    final store = await SharedPrefsKeyValueStore.create();
+    await LocalNotificationsService.instance.initialize();
+    return store;
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
+    return FutureBuilder<SharedPrefsKeyValueStore>(
       future: _initialization,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          return ProviderScope(
-            overrides: [
-              keyValueStoreProvider.overrideWithValue(_store),
-            ],
-            child: const VadaAdminApp(),
-          );
-        }
-
         if (snapshot.hasError) {
           return _BootstrapMaterialApp(
             child: Center(
@@ -73,11 +85,19 @@ class _BootstrapAppState extends State<_BootstrapApp> {
                       'Failed to initialize app. Please retry.',
                       textAlign: TextAlign.center,
                     ),
+                    if (snapshot.error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        snapshot.error.toString(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: () {
                         setState(() {
-                          _initialization = _initializeFirebase();
+                          _initialization = _startInitialization();
                         });
                       },
                       child: const Text('Retry'),
@@ -86,6 +106,16 @@ class _BootstrapAppState extends State<_BootstrapApp> {
                 ),
               ),
             ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.done &&
+            snapshot.hasData) {
+          return ProviderScope(
+            overrides: [
+              keyValueStoreProvider.overrideWithValue(snapshot.data!),
+            ],
+            child: const VadaAdminApp(),
           );
         }
 

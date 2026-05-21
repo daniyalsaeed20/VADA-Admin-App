@@ -110,7 +110,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return onLoginPage ? null : AppRoutes.login;
       }
 
-      final isAdmin = await authRepo.isAdmin(user.uid);
+      final isAdmin = await authRepo
+          .isAdmin(user.uid)
+          .timeout(const Duration(seconds: 15), onTimeout: () => false);
       if (!isAdmin) {
         await authRepo.logout();
         return AppRoutes.login;
