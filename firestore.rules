@@ -213,7 +213,14 @@ service cloud.firestore {
     }
 
     match /notifications/{docId} {
-      allow read: if isAdmin() || fighterCanReadNotification();
+      // Any signed-in app user can read broadcast + their own targeted messages.
+      // Avoid isFighter() here so reads are not denied while the users/{uid} profile
+      // is still loading on cold start (seen on iOS).
+      allow read: if isAdmin()
+          || (isSignedIn()
+              && resource.data.target == 'broadcast')
+          || (isSignedIn()
+              && resource.data.targetUserId == request.auth.uid);
 
       allow write: if isAdmin();
     }
