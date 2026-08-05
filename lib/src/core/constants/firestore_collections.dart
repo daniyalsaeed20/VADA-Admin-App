@@ -7,5 +7,6 @@ class FirestoreCollections {
   static const notifications = 'notifications';
   static const scheduleChangeRequests = 'scheduleChangeRequests';
   static const settings = 'settings';
+  static const whereaboutsProfiles = 'whereaboutsProfiles';
   static const metaDoc = '_meta';
 }

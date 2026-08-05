@@ -39,6 +39,10 @@ class LocationsRepository {
   Future<String> createLocation({
     required String name,
     required String address,
+    String city = '',
+    String stateCounty = '',
+    String postalCode = '',
+    String country = '',
     required String type,
     required List<String> assignedFighterIds,
   }) async {
@@ -46,6 +50,10 @@ class LocationsRepository {
     final doc = await _locations.add({
       'name': name.trim(),
       'address': address.trim(),
+      'city': city.trim(),
+      'stateCounty': stateCounty.trim(),
+      'postalCode': postalCode.trim(),
+      'country': country.trim(),
       'type': type.trim().toLowerCase(),
       'assignedFighterIds': assignedFighterIds,
       'createdAt': now,
@@ -98,12 +106,20 @@ class LocationsRepository {
     required String id,
     required String name,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String type,
     required List<String> assignedFighterIds,
   }) async {
     await _locations.doc(id).set({
       'name': name.trim(),
       'address': address.trim(),
+      'city': city.trim(),
+      'stateCounty': stateCounty.trim(),
+      'postalCode': postalCode.trim(),
+      'country': country.trim(),
       'type': type.trim().toLowerCase(),
       'assignedFighterIds': assignedFighterIds,
       'updatedAt': FieldValue.serverTimestamp(),

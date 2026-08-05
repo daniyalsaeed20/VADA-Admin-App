@@ -229,6 +229,18 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Standing daily preferred testing window (not a schedule entry).
+    // Doc ID = fighter UID. Fighters write their own profile; admins read/write all.
+    match /whereaboutsProfiles/{fighterId} {
+      allow read: if isAdmin() || isSelf(fighterId);
+
+      allow create, update: if isAdmin()
+          || (isSelf(fighterId)
+              && request.resource.data.fighterId == request.auth.uid);
+
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

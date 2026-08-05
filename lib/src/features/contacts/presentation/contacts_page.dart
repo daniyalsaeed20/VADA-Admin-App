@@ -175,7 +175,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                         ),
                                         Text(contact.phone),
                                         Text(contact.email),
-                                        Text(contact.address),
+                                        Text(contact.formattedAddress),
                                         SizedBox(
                                           height: AppLayout.smallGap(context),
                                         ),
@@ -222,7 +222,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                                         SizedBox(
                                           width: 220,
                                           child: Text(
-                                            contact.address,
+                                            contact.formattedAddress,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -295,7 +295,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       return contact.name.toLowerCase().contains(query) ||
           contact.email.toLowerCase().contains(query) ||
           contact.phone.toLowerCase().contains(query) ||
-          contact.address.toLowerCase().contains(query) ||
+          contact.addressFields.matchesQuery(query) ||
           contact.role.toLowerCase().contains(query);
     }).toList();
   }
@@ -417,6 +417,10 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
   late final TextEditingController _addressController;
+  late final TextEditingController _cityController;
+  late final TextEditingController _stateCountyController;
+  late final TextEditingController _postalCodeController;
+  late final TextEditingController _countryController;
   String _selectedRole = 'other';
 
   bool get isEdit => widget.contact != null;
@@ -429,6 +433,12 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
     _phoneController = TextEditingController(text: contact?.phone ?? '');
     _emailController = TextEditingController(text: contact?.email ?? '');
     _addressController = TextEditingController(text: contact?.address ?? '');
+    _cityController = TextEditingController(text: contact?.city ?? '');
+    _stateCountyController =
+        TextEditingController(text: contact?.stateCounty ?? '');
+    _postalCodeController =
+        TextEditingController(text: contact?.postalCode ?? '');
+    _countryController = TextEditingController(text: contact?.country ?? '');
     _selectedRole = normalizeContactRole(contact?.role);
   }
 
@@ -438,6 +448,10 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
+    _cityController.dispose();
+    _stateCountyController.dispose();
+    _postalCodeController.dispose();
+    _countryController.dispose();
     super.dispose();
   }
 
@@ -477,6 +491,26 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
                 _buildTextField(
                   controller: _addressController,
                   label: loc.tr('contacts.address'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _cityController,
+                  label: loc.tr('common.city'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _stateCountyController,
+                  label: loc.tr('common.stateCounty'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _postalCodeController,
+                  label: loc.tr('common.postalCode'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _countryController,
+                  label: loc.tr('common.country'),
                 ),
                 SizedBox(height: AppLayout.smallGap(context)),
                 DropdownButtonFormField<String>(
@@ -533,6 +567,10 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
                       phone: _phoneController.text,
                       email: _emailController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       role: _selectedRole,
                     );
                   } else {
@@ -541,6 +579,10 @@ class _ContactDialogState extends ConsumerState<_ContactDialog> {
                       phone: _phoneController.text,
                       email: _emailController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       role: _selectedRole,
                     );
                   }

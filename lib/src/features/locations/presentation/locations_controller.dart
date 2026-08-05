@@ -47,6 +47,10 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
   Future<void> create({
     required String name,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String type,
     required List<String> assignedFighterIds,
   }) async {
@@ -56,6 +60,10 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
       await _ref.read(locationsRepositoryProvider).createLocation(
             name: name,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             type: type,
             assignedFighterIds: assignedFighterIds,
           );
@@ -75,6 +83,10 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
     required String id,
     required String name,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String type,
     required List<String> assignedFighterIds,
   }) async {
@@ -85,6 +97,10 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
             id: id,
             name: name,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             type: type,
             assignedFighterIds: assignedFighterIds,
           );

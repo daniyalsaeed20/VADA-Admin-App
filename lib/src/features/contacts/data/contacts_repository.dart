@@ -41,6 +41,10 @@ class ContactsRepository {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String role,
   }) async {
     final now = FieldValue.serverTimestamp();
@@ -49,6 +53,10 @@ class ContactsRepository {
       'phone': phone.trim(),
       'email': email.trim().toLowerCase(),
       'address': address.trim(),
+      'city': city.trim(),
+      'stateCounty': stateCounty.trim(),
+      'postalCode': postalCode.trim(),
+      'country': country.trim(),
       'role': role.trim().toLowerCase(),
       'createdAt': now,
       'updatedAt': now,
@@ -61,6 +69,10 @@ class ContactsRepository {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String role,
   }) async {
     await _contacts.doc(id).set({
@@ -68,6 +80,10 @@ class ContactsRepository {
       'phone': phone.trim(),
       'email': email.trim().toLowerCase(),
       'address': address.trim(),
+      'city': city.trim(),
+      'stateCounty': stateCounty.trim(),
+      'postalCode': postalCode.trim(),
+      'country': country.trim(),
       'role': role.trim().toLowerCase(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

@@ -38,7 +38,7 @@ class _FightersPageState extends ConsumerState<FightersPage> {
   @override
   Widget build(BuildContext context) {
     final loc = context.l10n;
-    final fightersAsync = ref.watch(fightersStreamProvider);
+    final fightersAsync = ref.watch(fightersWithTestingWindowsProvider);
     final mutationState = ref.watch(fighterMutationControllerProvider);
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 760;
@@ -121,7 +121,10 @@ class _FightersPageState extends ConsumerState<FightersPage> {
                         Text(loc.tr('fighters.error')),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed: () => ref.refresh(fightersStreamProvider),
+                          onPressed: () {
+                            ref.invalidate(fightersStreamProvider);
+                            ref.invalidate(testingWindowsStreamProvider);
+                          },
                           icon: const Icon(Icons.refresh),
                           label: Text(loc.tr('common.retry')),
                         ),
@@ -242,7 +245,8 @@ class _FightersPageState extends ConsumerState<FightersPage> {
     return fighters.where((fighter) {
       return fighter.fullName.toLowerCase().contains(searchQuery) ||
           fighter.email.toLowerCase().contains(searchQuery) ||
-          fighter.phone.toLowerCase().contains(searchQuery);
+          fighter.phone.toLowerCase().contains(searchQuery) ||
+          fighter.addressFields.matchesQuery(searchQuery);
     }).toList();
   }
 
@@ -539,6 +543,12 @@ class _FightersMobileList extends ConsumerWidget {
                   icon: Icons.phone_outlined,
                   value: fighter.phone,
                 ),
+                _FighterInfoLine(
+                  icon: Icons.access_time_outlined,
+                  value: fighter.formattedTestingWindow.isEmpty
+                      ? context.l10n.tr('fighters.testingWindowNotSet')
+                      : '${context.l10n.tr('fighters.testingWindow')}: ${fighter.formattedTestingWindow}',
+                ),
                 SizedBox(height: AppLayout.smallGap(context)),
                 Row(
                   children: [
@@ -724,6 +734,7 @@ class _FightersTableState extends ConsumerState<_FightersTable> {
                     DataColumn(label: Text(loc.tr('fighters.fullName'))),
                     DataColumn(label: Text(loc.tr('fighters.email'))),
                     DataColumn(label: Text(loc.tr('fighters.phone'))),
+                    DataColumn(label: Text(loc.tr('fighters.testingWindow'))),
                     DataColumn(label: Text(loc.tr('fighters.status'))),
                     DataColumn(label: Text(loc.tr('fighters.actions'))),
                   ],
@@ -766,6 +777,13 @@ class _FightersTableState extends ConsumerState<_FightersTable> {
                           ),
                         ),
                         DataCell(Text(fighter.phone)),
+                        DataCell(
+                          Text(
+                            fighter.formattedTestingWindow.isEmpty
+                                ? loc.tr('fighters.testingWindowNotSet')
+                                : fighter.formattedTestingWindow,
+                          ),
+                        ),
                         DataCell(
                             _FighterStatusChip(disabled: fighter.disabled)),
                         DataCell(
@@ -825,6 +843,10 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
   late final TextEditingController _addressController;
+  late final TextEditingController _cityController;
+  late final TextEditingController _stateCountyController;
+  late final TextEditingController _postalCodeController;
+  late final TextEditingController _countryController;
   late final TextEditingController _primaryContactController;
   late final TextEditingController _passwordController;
   DateTime? _selectedDateOfBirth;
@@ -847,6 +869,12 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
     _phoneController = TextEditingController(text: fighter?.phone ?? '');
     _emailController = TextEditingController(text: fighter?.email ?? '');
     _addressController = TextEditingController(text: fighter?.address ?? '');
+    _cityController = TextEditingController(text: fighter?.city ?? '');
+    _stateCountyController =
+        TextEditingController(text: fighter?.stateCounty ?? '');
+    _postalCodeController =
+        TextEditingController(text: fighter?.postalCode ?? '');
+    _countryController = TextEditingController(text: fighter?.country ?? '');
     _primaryContactController = TextEditingController(
       text: fighter?.primaryContactPerson ?? '',
     );
@@ -862,6 +890,10 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
+    _cityController.dispose();
+    _stateCountyController.dispose();
+    _postalCodeController.dispose();
+    _countryController.dispose();
     _primaryContactController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -924,6 +956,30 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
                 _buildTextField(
                   controller: _addressController,
                   label: loc.tr('fighters.address'),
+                  requiredField: true,
+                  width: dialogWidth,
+                ),
+                _buildTextField(
+                  controller: _cityController,
+                  label: loc.tr('common.city'),
+                  requiredField: true,
+                  width: showTwoColumns ? dialogWidth * 0.48 : dialogWidth,
+                ),
+                _buildTextField(
+                  controller: _stateCountyController,
+                  label: loc.tr('common.stateCounty'),
+                  requiredField: true,
+                  width: showTwoColumns ? dialogWidth * 0.48 : dialogWidth,
+                ),
+                _buildTextField(
+                  controller: _postalCodeController,
+                  label: loc.tr('common.postalCode'),
+                  requiredField: true,
+                  width: showTwoColumns ? dialogWidth * 0.48 : dialogWidth,
+                ),
+                _buildTextField(
+                  controller: _countryController,
+                  label: loc.tr('common.country'),
                   requiredField: true,
                   width: showTwoColumns ? dialogWidth * 0.48 : dialogWidth,
                 ),
@@ -988,6 +1044,10 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
                       phone: _phoneController.text,
                       email: _emailController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       primaryContactPerson: _primaryContactController.text,
                       disabled: _disabled,
                     );
@@ -999,6 +1059,10 @@ class _FighterDialogState extends ConsumerState<_FighterDialog> {
                       phone: _phoneController.text,
                       email: _emailController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       primaryContactPerson: _primaryContactController.text,
                       password: _passwordController.text,
                       disabled: _disabled,

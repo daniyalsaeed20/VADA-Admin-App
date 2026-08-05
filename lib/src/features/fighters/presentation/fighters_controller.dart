@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/firebase/firebase_providers.dart';
 import '../data/fighters_repository.dart';
 import '../domain/fighter.dart';
+import '../domain/testing_window.dart';
 
 final fightersRepositoryProvider = Provider<FightersRepository>((ref) {
   return FightersRepository(ref.watch(firestoreProvider));
@@ -11,6 +12,34 @@ final fightersRepositoryProvider = Provider<FightersRepository>((ref) {
 
 final fightersStreamProvider = StreamProvider<List<Fighter>>((ref) {
   return ref.watch(fightersRepositoryProvider).watchFighters();
+});
+
+final testingWindowsStreamProvider =
+    StreamProvider<Map<String, TestingWindow>>((ref) {
+  return ref.watch(fightersRepositoryProvider).watchTestingWindows();
+});
+
+/// Fighters list with daily testing windows from [whereaboutsProfiles].
+final fightersWithTestingWindowsProvider = Provider<AsyncValue<List<Fighter>>>((
+  ref,
+) {
+  final fightersAsync = ref.watch(fightersStreamProvider);
+  final windowsAsync = ref.watch(testingWindowsStreamProvider);
+
+  return fightersAsync.when(
+    data: (fighters) {
+      final windows = windowsAsync.asData?.value ?? const {};
+      return AsyncValue.data([
+        for (final fighter in fighters)
+          fighter.copyWith(
+            testingWindowStart: windows[fighter.uid]?.start ?? '',
+            testingWindowEnd: windows[fighter.uid]?.end ?? '',
+          ),
+      ]);
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (error, stackTrace) => AsyncValue.error(error, stackTrace),
+  );
 });
 
 class FighterMutationState {
@@ -53,6 +82,10 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String primaryContactPerson,
     required String password,
     required bool disabled,
@@ -76,6 +109,10 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
             phone: phone,
             email: email,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             primaryContactPerson: primaryContactPerson,
             password: password,
             disabled: disabled,
@@ -100,6 +137,10 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String primaryContactPerson,
     required bool disabled,
   }) async {
@@ -123,6 +164,10 @@ class FighterMutationController extends StateNotifier<FighterMutationState> {
             phone: phone,
             email: email,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             primaryContactPerson: primaryContactPerson,
             disabled: disabled,
           );

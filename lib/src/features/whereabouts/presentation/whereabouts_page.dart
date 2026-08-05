@@ -1439,7 +1439,9 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
         }
         final start = _startTimeController.text.trim();
         final end = _endTimeController.text.trim();
-        if (start.isNotEmpty && end.isNotEmpty && !_isTimeRangeValid(start, end)) {
+        if (start.isNotEmpty &&
+            end.isNotEmpty &&
+            !_isTimeRangeValid(start, end)) {
           return context.l10n.tr('whereabouts.invalidTime');
         }
         return null;
@@ -1471,9 +1473,7 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
       initialTime: parsed ?? now,
     );
     if (picked != null) {
-      final hour = picked.hour.toString().padLeft(2, '0');
-      final minute = picked.minute.toString().padLeft(2, '0');
-      controller.text = '$hour:$minute';
+      controller.text = _formatHHmm(picked);
     }
   }
 }
@@ -1601,6 +1601,12 @@ bool _isTimeRangeValid(String start, String end) {
   final startMinutes = startTime.hour * 60 + startTime.minute;
   final endMinutes = endTime.hour * 60 + endTime.minute;
   return endMinutes > startMinutes;
+}
+
+String _formatHHmm(TimeOfDay time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }
 
 DateTime? _tryParseYmd(String raw) {

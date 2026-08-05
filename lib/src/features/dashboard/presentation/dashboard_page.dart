@@ -1537,7 +1537,7 @@ class _AssignedLocationsPreview extends StatelessWidget {
         }
 
         Widget chipFor(LocationRecord item) {
-          final address = item.address.trim();
+          final address = item.formattedAddress.trim();
           final tooltip = address.isEmpty ? item.name : '${item.name}\n$address';
           return Tooltip(
             message: tooltip,

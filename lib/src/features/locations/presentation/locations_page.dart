@@ -175,7 +175,7 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                                             ),
                                           ],
                                         ),
-                                        Text(item.address),
+                                        Text(item.formattedAddress),
                                         SizedBox(
                                           height: AppLayout.smallGap(context),
                                         ),
@@ -241,7 +241,7 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                                           SizedBox(
                                             width: 230,
                                             child: Text(
-                                              item.address,
+                                              item.formattedAddress,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -329,7 +329,7 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
           .map((id) => fighterNameById[id]?.toLowerCase() ?? '')
           .join(' ');
       return item.name.toLowerCase().contains(query) ||
-          item.address.toLowerCase().contains(query) ||
+          item.addressFields.matchesQuery(query) ||
           item.type.toLowerCase().contains(query) ||
           assignees.contains(query);
     }).toList();
@@ -460,6 +460,10 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
+  late final TextEditingController _cityController;
+  late final TextEditingController _stateCountyController;
+  late final TextEditingController _postalCodeController;
+  late final TextEditingController _countryController;
   late final TextEditingController _fighterSearchController;
   late String _selectedType;
   late Set<String> _assignedFighterIds;
@@ -472,6 +476,12 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     final item = widget.location;
     _nameController = TextEditingController(text: item?.name ?? '');
     _addressController = TextEditingController(text: item?.address ?? '');
+    _cityController = TextEditingController(text: item?.city ?? '');
+    _stateCountyController =
+        TextEditingController(text: item?.stateCounty ?? '');
+    _postalCodeController =
+        TextEditingController(text: item?.postalCode ?? '');
+    _countryController = TextEditingController(text: item?.country ?? '');
     _fighterSearchController = TextEditingController();
     _selectedType = _types.contains(item?.type) ? item!.type : 'testing';
     _assignedFighterIds = {...(item?.assignedFighterIds ?? const <String>[])};
@@ -481,6 +491,10 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _cityController.dispose();
+    _stateCountyController.dispose();
+    _postalCodeController.dispose();
+    _countryController.dispose();
     _fighterSearchController.dispose();
     super.dispose();
   }
@@ -512,6 +526,26 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                 _buildTextField(
                   controller: _addressController,
                   label: loc.tr('locations.address'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _cityController,
+                  label: loc.tr('common.city'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _stateCountyController,
+                  label: loc.tr('common.stateCounty'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _postalCodeController,
+                  label: loc.tr('common.postalCode'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                _buildTextField(
+                  controller: _countryController,
+                  label: loc.tr('common.country'),
                 ),
                 SizedBox(height: AppLayout.smallGap(context)),
                 DropdownButtonFormField<String>(
@@ -617,6 +651,10 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                       id: widget.location!.id,
                       name: _nameController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       type: _selectedType,
                       assignedFighterIds: assignedIds,
                     );
@@ -624,6 +662,10 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                     await notifier.create(
                       name: _nameController.text,
                       address: _addressController.text,
+                      city: _cityController.text,
+                      stateCounty: _stateCountyController.text,
+                      postalCode: _postalCodeController.text,
+                      country: _countryController.text,
                       type: _selectedType,
                       assignedFighterIds: assignedIds,
                     );

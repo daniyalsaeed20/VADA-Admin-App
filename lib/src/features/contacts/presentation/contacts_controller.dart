@@ -49,6 +49,10 @@ class ContactMutationController extends StateNotifier<ContactMutationState> {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String role,
   }) async {
     state =
@@ -59,6 +63,10 @@ class ContactMutationController extends StateNotifier<ContactMutationState> {
             phone: phone,
             email: email,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             role: role,
           );
       state = state.copyWith(
@@ -79,6 +87,10 @@ class ContactMutationController extends StateNotifier<ContactMutationState> {
     required String phone,
     required String email,
     required String address,
+    required String city,
+    required String stateCounty,
+    required String postalCode,
+    required String country,
     required String role,
   }) async {
     state =
@@ -90,6 +102,10 @@ class ContactMutationController extends StateNotifier<ContactMutationState> {
             phone: phone,
             email: email,
             address: address,
+            city: city,
+            stateCounty: stateCounty,
+            postalCode: postalCode,
+            country: country,
             role: role,
           );
       state = state.copyWith(
