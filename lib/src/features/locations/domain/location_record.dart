@@ -15,6 +15,8 @@ class LocationRecord {
     required this.assignedFighterIds,
     required this.createdAt,
     required this.updatedAt,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -28,6 +30,10 @@ class LocationRecord {
   final List<String> assignedFighterIds;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasCoordinates => latitude != null && longitude != null;
 
   AddressFields get addressFields => AddressFields(
         address: address,
@@ -44,6 +50,7 @@ class LocationRecord {
   ) {
     final data = doc.data()!;
     final address = AddressFields.fromMap(data);
+    final geoPoint = data['geoPoint'];
     return LocationRecord(
       id: doc.id,
       name: data['name'] as String? ?? '',
@@ -58,6 +65,8 @@ class LocationRecord {
           .toList(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      latitude: geoPoint is GeoPoint ? geoPoint.latitude : null,
+      longitude: geoPoint is GeoPoint ? geoPoint.longitude : null,
     );
   }
 }

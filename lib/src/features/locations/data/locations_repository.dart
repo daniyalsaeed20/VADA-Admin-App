@@ -45,6 +45,8 @@ class LocationsRepository {
     String country = '',
     required String type,
     required List<String> assignedFighterIds,
+    double? latitude,
+    double? longitude,
   }) async {
     final now = FieldValue.serverTimestamp();
     final doc = await _locations.add({
@@ -56,6 +58,8 @@ class LocationsRepository {
       'country': country.trim(),
       'type': type.trim().toLowerCase(),
       'assignedFighterIds': assignedFighterIds,
+      if (latitude != null && longitude != null)
+        'geoPoint': GeoPoint(latitude, longitude),
       'createdAt': now,
       'updatedAt': now,
     });
@@ -112,6 +116,8 @@ class LocationsRepository {
     required String country,
     required String type,
     required List<String> assignedFighterIds,
+    double? latitude,
+    double? longitude,
   }) async {
     await _locations.doc(id).set({
       'name': name.trim(),
@@ -122,6 +128,8 @@ class LocationsRepository {
       'country': country.trim(),
       'type': type.trim().toLowerCase(),
       'assignedFighterIds': assignedFighterIds,
+      if (latitude != null && longitude != null)
+        'geoPoint': GeoPoint(latitude, longitude),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

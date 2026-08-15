@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,8 +13,70 @@ import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
+import '../../locations/domain/location_record.dart';
+import '../../locations/presentation/locations_controller.dart';
+import '../../shared/data/google_geocoding_service.dart';
 import '../domain/checkin_record.dart';
 import 'checkins_controller.dart';
+
+/// A fighter-assigned Location within this radius of a check-in is
+/// considered a match for compliance display purposes.
+const double _nearbyLocationRadiusMeters = 60;
+
+class _NearestLocationMatch {
+  const _NearestLocationMatch({
+    required this.name,
+    required this.distanceMeters,
+  });
+
+  final String name;
+  final double distanceMeters;
+}
+
+_NearestLocationMatch? _nearestAssignedLocation({
+  required CheckinRecord checkin,
+  required List<LocationRecord> locations,
+}) {
+  _NearestLocationMatch? nearest;
+  for (final location in locations) {
+    if (!location.hasCoordinates) {
+      continue;
+    }
+    if (!location.assignedFighterIds.contains(checkin.fighterId)) {
+      continue;
+    }
+    final distance = Geolocator.distanceBetween(
+      checkin.latitude,
+      checkin.longitude,
+      location.latitude!,
+      location.longitude!,
+    );
+    if (distance > _nearbyLocationRadiusMeters) {
+      continue;
+    }
+    if (nearest == null || distance < nearest.distanceMeters) {
+      nearest = _NearestLocationMatch(
+        name: location.name,
+        distanceMeters: distance,
+      );
+    }
+  }
+  return nearest;
+}
+
+String? _nearbyLocationLabel({
+  required CheckinRecord checkin,
+  required List<LocationRecord> locations,
+}) {
+  final match = _nearestAssignedLocation(
+    checkin: checkin,
+    locations: locations,
+  );
+  if (match == null) {
+    return null;
+  }
+  return '${match.name} (${match.distanceMeters.toStringAsFixed(0)}m)';
+}
 
 class CheckinsPage extends ConsumerStatefulWidget {
   const CheckinsPage({super.key});
@@ -43,6 +106,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
     final loc = context.l10n;
     final checkinsAsync = ref.watch(checkinsStreamProvider);
     final fightersAsync = ref.watch(fightersStreamProvider);
+    final locationsAsync = ref.watch(locationsStreamProvider);
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 980;
     final scheme = Theme.of(context).colorScheme;
@@ -51,6 +115,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
     final fighterNameById = {
       for (final fighter in fighters) fighter.uid: fighter.fullName,
     };
+    final locations = locationsAsync.asData?.value ?? const <LocationRecord>[];
 
     return Padding(
       padding: EdgeInsets.all(AppLayout.pagePadding(context)),
@@ -65,8 +130,8 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
           Text(
             'Review incoming GPS check-ins from fighters.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           SizedBox(height: AppLayout.mediumGap(context)),
           _OperationsBanner(),
@@ -83,16 +148,13 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                   ],
                 ),
               ),
-              error: (_, _) => const Center(
-                child: Text('Could not load check-ins.'),
-              ),
+              error: (_, _) =>
+                  const Center(child: Text('Could not load check-ins.')),
               data: (checkins) {
                 final analytics = _CheckinAnalytics.fromRecords(checkins);
                 final anomalies = _detectAnomalies(checkins, fighterNameById);
                 if (checkins.isEmpty) {
-                  return const Center(
-                    child: Text('No check-ins found yet.'),
-                  );
+                  return const Center(child: Text('No check-ins found yet.'));
                 }
 
                 final filtered = _filterCheckins(checkins, fighterNameById);
@@ -221,7 +283,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                             ...pageItems.map((item) {
                               final fighterName =
                                   fighterNameById[item.fighterId] ??
-                                      item.fighterId;
+                                  item.fighterId;
                               final severity = _severityFor(item);
                               return Padding(
                                 padding: EdgeInsets.only(
@@ -233,18 +295,40 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                       context: context,
                                       record: item,
                                       fighterName: fighterName,
+                                      locations: locations,
                                     ),
                                     title: Text(
                                       fighterName,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    subtitle: Text(
-                                      '${_formatDate(item.capturedAt ?? item.createdAt)}'
-                                      '\n${_formatCoordinate(item.latitude)}, ${_formatCoordinate(item.longitude)}'
-                                      '\n${severity.label}',
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _formatDate(
+                                            item.capturedAt ?? item.createdAt,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${_formatCoordinate(item.latitude)}, '
+                                          '${_formatCoordinate(item.longitude)}',
+                                        ),
+                                        _ReverseGeocodedLocation(
+                                          latitude: item.latitude,
+                                          longitude: item.longitude,
+                                          showCoordinates: false,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          nearbyLocationLabel:
+                                              _nearbyLocationLabel(
+                                                checkin: item,
+                                                locations: locations,
+                                              ),
+                                        ),
+                                        Text(severity.label),
+                                      ],
                                     ),
                                     isThreeLine: true,
                                     trailing: IconButton(
@@ -264,6 +348,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                   DataColumn(label: Text('Fighter')),
                                   DataColumn(label: Text('Captured At')),
                                   DataColumn(label: Text('Coordinates')),
+                                  DataColumn(label: Text('Location')),
                                   DataColumn(label: Text('Accuracy (m)')),
                                   DataColumn(label: Text('Label')),
                                   DataColumn(label: Text('Severity')),
@@ -273,7 +358,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                 rows: pageItems.map((item) {
                                   final fighterName =
                                       fighterNameById[item.fighterId] ??
-                                          item.fighterId;
+                                      item.fighterId;
                                   final severity = _severityFor(item);
                                   return DataRow(
                                     cells: [
@@ -301,11 +386,28 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                         ),
                                       ),
                                       DataCell(
+                                        SizedBox(
+                                          width: 260,
+                                          child: _ReverseGeocodedLocation(
+                                            latitude: item.latitude,
+                                            longitude: item.longitude,
+                                            showCoordinates: false,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            nearbyLocationLabel:
+                                                _nearbyLocationLabel(
+                                                  checkin: item,
+                                                  locations: locations,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
                                         Text(
                                           item.accuracyMeters == null
                                               ? '-'
                                               : item.accuracyMeters!
-                                                  .toStringAsFixed(1),
+                                                    .toStringAsFixed(1),
                                         ),
                                       ),
                                       DataCell(
@@ -322,7 +424,8 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                       DataCell(
                                         IconButton(
                                           tooltip: 'Open map',
-                                          onPressed: () => _openExternalMap(item),
+                                          onPressed: () =>
+                                              _openExternalMap(item),
                                           icon: const Icon(Icons.map_outlined),
                                         ),
                                       ),
@@ -333,6 +436,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
                                             context: context,
                                             record: item,
                                             fighterName: fighterName,
+                                            locations: locations,
                                           ),
                                           icon: const Icon(Icons.open_in_new),
                                         ),
@@ -418,8 +522,8 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
         return true;
       }
 
-      final fighterName =
-          (fighterNameById[item.fighterId] ?? item.fighterId).toLowerCase();
+      final fighterName = (fighterNameById[item.fighterId] ?? item.fighterId)
+          .toLowerCase();
       final label = (item.label ?? '').toLowerCase();
       final lat = _formatCoordinate(item.latitude);
       final lng = _formatCoordinate(item.longitude);
@@ -574,6 +678,7 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
     required BuildContext context,
     required CheckinRecord record,
     required String fighterName,
+    required List<LocationRecord> locations,
   }) {
     final severity = _severityFor(record);
     final googleMapsUrl = _googleMapsUri(record);
@@ -602,6 +707,18 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
               _DetailRow(
                 label: 'Timestamp (ms)',
                 value: '${record.timestampMillis}',
+              ),
+              _DetailRow(
+                label: 'Address',
+                valueWidget: _ReverseGeocodedLocation(
+                  latitude: record.latitude,
+                  longitude: record.longitude,
+                  showCoordinates: false,
+                  nearbyLocationLabel: _nearbyLocationLabel(
+                    checkin: record,
+                    locations: locations,
+                  ),
+                ),
               ),
               _DetailRow(
                 label: 'Latitude',
@@ -663,13 +780,17 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
   Uri _googleMapsUri(CheckinRecord record) {
     final lat = record.latitude.toStringAsFixed(6);
     final lng = record.longitude.toStringAsFixed(6);
-    return Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    return Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+    );
   }
 
   Uri _openStreetMapUri(CheckinRecord record) {
     final lat = record.latitude.toStringAsFixed(6);
     final lng = record.longitude.toStringAsFixed(6);
-    return Uri.parse('https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=16/$lat/$lng');
+    return Uri.parse(
+      'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=16/$lat/$lng',
+    );
   }
 
   Future<void> _openExternalMap(CheckinRecord record) async {
@@ -681,9 +802,9 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
     if (launched || !mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not open $uri')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Could not open $uri')));
   }
 
   Future<void> _copyCsvReport({
@@ -977,20 +1098,11 @@ class _KpiCard extends StatelessWidget {
             children: [
               Icon(icon),
               SizedBox(height: AppLayout.smallGap(context)),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text(title, style: Theme.of(context).textTheme.labelLarge),
               SizedBox(height: AppLayout.smallGap(context)),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              Text(value, style: Theme.of(context).textTheme.headlineSmall),
               SizedBox(height: AppLayout.smallGap(context)),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),
@@ -1009,21 +1121,21 @@ class _SeverityBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (bg, fg) = switch (severity) {
       _CheckinSeverity.good => (
-          Colors.green.withValues(alpha: 0.15),
-          Colors.green.shade700,
-        ),
+        Colors.green.withValues(alpha: 0.15),
+        Colors.green.shade700,
+      ),
       _CheckinSeverity.warning => (
-          Colors.orange.withValues(alpha: 0.18),
-          Colors.orange.shade800,
-        ),
+        Colors.orange.withValues(alpha: 0.18),
+        Colors.orange.shade800,
+      ),
       _CheckinSeverity.critical => (
-          scheme.error.withValues(alpha: 0.15),
-          scheme.error,
-        ),
+        scheme.error.withValues(alpha: 0.15),
+        scheme.error,
+      ),
       _CheckinSeverity.info => (
-          scheme.surfaceContainerHighest,
-          scheme.onSurfaceVariant,
-        ),
+        scheme.surfaceContainerHighest,
+        scheme.onSurfaceVariant,
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1034,9 +1146,9 @@ class _SeverityBadge extends StatelessWidget {
       child: Text(
         severity.label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w700,
-            ),
+          color: fg,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1269,10 +1381,7 @@ class _GeoInsightsCard extends StatelessWidget {
 }
 
 class _MiniInsight extends StatelessWidget {
-  const _MiniInsight({
-    required this.title,
-    required this.value,
-  });
+  const _MiniInsight({required this.title, required this.value});
 
   final String title;
   final String value;
@@ -1314,10 +1423,7 @@ class _ExportBar extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Reporting',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text('Reporting', style: Theme.of(context).textTheme.titleSmall),
             Text(
               'Map links open externally (no embedded paid map API).',
               style: Theme.of(context).textTheme.bodySmall,
@@ -1413,7 +1519,9 @@ class _Pagination extends StatelessWidget {
                 )
                 .toList(),
           ),
-          Text(totalCount == 0 ? '0' : '${startIndex + 1}-$endIndex / $totalCount'),
+          Text(
+            totalCount == 0 ? '0' : '${startIndex + 1}-$endIndex / $totalCount',
+          ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1435,13 +1543,11 @@ class _Pagination extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, this.value = '', this.valueWidget});
 
   final String label;
   final String value;
+  final Widget? valueWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -1454,19 +1560,139 @@ class _DetailRow extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            child:
+                valueWidget ??
+                Text(value, style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Shows a check-in's coordinates alongside the human-readable address they
+/// resolve to, via Google's reverse-geocoding API. Results are cached by
+/// coordinate so scrolling/rebuilding the list doesn't re-query the same
+/// point repeatedly.
+class _ReverseGeocodedLocation extends StatefulWidget {
+  const _ReverseGeocodedLocation({
+    required this.latitude,
+    required this.longitude,
+    this.showCoordinates = true,
+    this.maxLines,
+    this.overflow,
+    this.nearbyLocationLabel,
+  });
+
+  final double latitude;
+  final double longitude;
+  final bool showCoordinates;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final String? nearbyLocationLabel;
+
+  static const _geocoding = GoogleGeocodingService();
+  static final Map<String, String?> _addressCache = {};
+
+  @override
+  State<_ReverseGeocodedLocation> createState() =>
+      _ReverseGeocodedLocationState();
+}
+
+class _ReverseGeocodedLocationState extends State<_ReverseGeocodedLocation> {
+  String? _address;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReverseGeocodedLocation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.latitude != widget.latitude ||
+        oldWidget.longitude != widget.longitude) {
+      _resolve();
+    }
+  }
+
+  String get _cacheKey =>
+      '${widget.latitude.toStringAsFixed(6)},${widget.longitude.toStringAsFixed(6)}';
+
+  Future<void> _resolve() async {
+    if (widget.latitude == 0 && widget.longitude == 0) {
+      setState(() {
+        _isLoading = false;
+        _address = null;
+      });
+      return;
+    }
+    final cache = _ReverseGeocodedLocation._addressCache;
+    final key = _cacheKey;
+    if (cache.containsKey(key)) {
+      setState(() {
+        _isLoading = false;
+        _address = cache[key];
+      });
+      return;
+    }
+    setState(() => _isLoading = true);
+    String? address;
+    try {
+      final result = await _ReverseGeocodedLocation._geocoding.reverseGeocode(
+        widget.latitude,
+        widget.longitude,
+      );
+      address = result?.formattedAddress;
+    } catch (_) {
+      address = null;
+    }
+    cache[key] = address;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLoading = false;
+      _address = address;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final coordinates =
+        '${widget.latitude.toStringAsFixed(6)}, ${widget.longitude.toStringAsFixed(6)}';
+    final String primaryText;
+    if (_isLoading || _address == null || _address!.isEmpty) {
+      primaryText = coordinates;
+    } else if (!widget.showCoordinates) {
+      primaryText = _address!;
+    } else {
+      primaryText = '${_address!}\n$coordinates';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(primaryText, maxLines: widget.maxLines, overflow: widget.overflow),
+        if (widget.nearbyLocationLabel != null)
+          Text(
+            widget.nearbyLocationLabel!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
     );
   }
 }

@@ -2,12 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
+import '../../shared/data/google_geocoding_service.dart';
 import '../domain/location_record.dart';
 import 'locations_controller.dart';
 
@@ -467,6 +470,8 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   late final TextEditingController _fighterSearchController;
   late String _selectedType;
   late Set<String> _assignedFighterIds;
+  double? _latitude;
+  double? _longitude;
 
   bool get isEdit => widget.location != null;
 
@@ -485,6 +490,8 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     _fighterSearchController = TextEditingController();
     _selectedType = _types.contains(item?.type) ? item!.type : 'testing';
     _assignedFighterIds = {...(item?.assignedFighterIds ?? const <String>[])};
+    _latitude = item?.latitude;
+    _longitude = item?.longitude;
   }
 
   @override
@@ -526,6 +533,33 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                 _buildTextField(
                   controller: _addressController,
                   label: loc.tr('locations.address'),
+                ),
+                SizedBox(height: AppLayout.smallGap(context)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _latitude != null && _longitude != null
+                            ? loc
+                                .tr('locations.coordinatesSet')
+                                .replaceAll(
+                                  '{lat}',
+                                  _latitude!.toStringAsFixed(6),
+                                )
+                                .replaceAll(
+                                  '{lng}',
+                                  _longitude!.toStringAsFixed(6),
+                                )
+                            : loc.tr('locations.coordinatesUnset'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _openMapPicker,
+                      icon: const Icon(Icons.map_outlined),
+                      label: Text(loc.tr('locations.pickOnMap')),
+                    ),
+                  ],
                 ),
                 SizedBox(height: AppLayout.smallGap(context)),
                 _buildTextField(
@@ -657,6 +691,8 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                       country: _countryController.text,
                       type: _selectedType,
                       assignedFighterIds: assignedIds,
+                      latitude: _latitude,
+                      longitude: _longitude,
                     );
                   } else {
                     await notifier.create(
@@ -668,6 +704,8 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                       country: _countryController.text,
                       type: _selectedType,
                       assignedFighterIds: assignedIds,
+                      latitude: _latitude,
+                      longitude: _longitude,
                     );
                   }
                   if (context.mounted) {
@@ -682,6 +720,37 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
         ),
       ],
     );
+  }
+
+  Future<void> _openMapPicker() async {
+    final result = await showDialog<GeocodeResult>(
+      context: context,
+      builder: (_) => _LocationMapPickerDialog(
+        initialLatitude: _latitude,
+        initialLongitude: _longitude,
+        initialQuery: _addressController.text,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _addressController.text = result.streetAddress;
+      if (result.city.isNotEmpty) {
+        _cityController.text = result.city;
+      }
+      if (result.stateCounty.isNotEmpty) {
+        _stateCountyController.text = result.stateCounty;
+      }
+      if (result.postalCode.isNotEmpty) {
+        _postalCodeController.text = result.postalCode;
+      }
+      if (result.country.isNotEmpty) {
+        _countryController.text = result.country;
+      }
+    });
   }
 
   Widget _buildTextField({
@@ -713,6 +782,285 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     return fighters
         .where((f) => f.fullName.toLowerCase().contains(query))
         .toList();
+  }
+}
+
+class _LocationMapPickerDialog extends StatefulWidget {
+  const _LocationMapPickerDialog({
+    this.initialLatitude,
+    this.initialLongitude,
+    this.initialQuery = '',
+  });
+
+  final double? initialLatitude;
+  final double? initialLongitude;
+  final String initialQuery;
+
+  @override
+  State<_LocationMapPickerDialog> createState() =>
+      _LocationMapPickerDialogState();
+}
+
+class _LocationMapPickerDialogState extends State<_LocationMapPickerDialog> {
+  static const LatLng _fallbackCenter = LatLng(0, 0);
+  static const _geocoding = GoogleGeocodingService();
+
+  late final TextEditingController _searchController;
+  GoogleMapController? _mapController;
+  LatLng? _selectedPosition;
+  LatLng? _deviceLocation;
+  GeocodeResult? _selectedResult;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: widget.initialQuery);
+    if (widget.initialLatitude != null && widget.initialLongitude != null) {
+      _selectedPosition =
+          LatLng(widget.initialLatitude!, widget.initialLongitude!);
+    } else {
+      _centerOnCurrentLocation();
+    }
+  }
+
+  Future<void> _centerOnCurrentLocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+        ),
+      );
+      if (!mounted || _selectedPosition != null) {
+        return;
+      }
+      final target = LatLng(position.latitude, position.longitude);
+      _deviceLocation = target;
+      final controller = _mapController;
+      if (controller != null) {
+        await controller.animateCamera(CameraUpdate.newLatLngZoom(target, 11));
+      }
+    } catch (_) {
+      // Geolocation unavailable/denied: fall back to the default map view.
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  LatLng get _initialCenter => _selectedPosition ?? _fallbackCenter;
+
+  Future<void> _searchAddress() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await _geocoding.geocodeAddress(query);
+      if (!mounted) {
+        return;
+      }
+      if (result == null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'No results found for that address.';
+        });
+        return;
+      }
+      final position = LatLng(result.latitude, result.longitude);
+      setState(() {
+        _isLoading = false;
+        _selectedPosition = position;
+        _selectedResult = result;
+      });
+      await _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(position, 16),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _onMapTap(LatLng position) async {
+    setState(() {
+      _selectedPosition = position;
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final result =
+          await _geocoding.reverseGeocode(position.latitude, position.longitude);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _selectedResult = result;
+        if (result != null) {
+          _searchController.text = result.formattedAddress;
+        }
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    final size = MediaQuery.sizeOf(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: size.width * 0.85,
+        height: size.height * 0.85,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: loc.tr('locations.searchAddress'),
+                        prefixIcon: const Icon(Icons.search),
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => _searchAddress(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _isLoading ? null : _searchAddress,
+                    child: Text(loc.tr('locations.searchButton')),
+                  ),
+                ],
+              ),
+            ),
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: Stack(
+                children: [
+                  GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _initialCenter,
+                      zoom: _selectedPosition != null ? 16 : 2,
+                    ),
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      if (_selectedPosition == null &&
+                          _deviceLocation != null) {
+                        controller.animateCamera(
+                          CameraUpdate.newLatLngZoom(_deviceLocation!, 11),
+                        );
+                      }
+                    },
+                    onTap: _onMapTap,
+                    markers: {
+                      if (_selectedPosition != null)
+                        Marker(
+                          markerId: const MarkerId('selected'),
+                          position: _selectedPosition!,
+                        ),
+                    },
+                  ),
+                  if (_isLoading)
+                    const Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(8),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(loc.tr('fighters.cancel')),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _selectedPosition == null
+                        ? null
+                        : () => Navigator.pop(
+                              context,
+                              _selectedResult ??
+                                  GeocodeResult(
+                                    latitude: _selectedPosition!.latitude,
+                                    longitude: _selectedPosition!.longitude,
+                                    formattedAddress: '',
+                                    streetAddress: '',
+                                  ),
+                            ),
+                    child: Text(loc.tr('locations.useThisLocation')),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

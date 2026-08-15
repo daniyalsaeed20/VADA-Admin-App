@@ -31,6 +31,15 @@
 
   <title>VADA Admin</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JavaScript API, used by the Locations "Pick on map" picker
+    for address search (geocoding) and map-tap reverse geocoding.
+    Replace YOUR_GOOGLE_MAPS_API_KEY with a key that has the Maps
+    JavaScript API, Places API, and Geocoding API enabled, and restrict it
+    by HTTP referrer to this app's domain(s) in Google Cloud Console.
+  -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCwDBiT-T81idbi7M0X2MpHw_6D12xpKcw&libraries=places"></script>
   <style>
     html, body {
       margin: 0;

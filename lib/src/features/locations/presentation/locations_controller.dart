@@ -53,6 +53,8 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
     required String country,
     required String type,
     required List<String> assignedFighterIds,
+    double? latitude,
+    double? longitude,
   }) async {
     state =
         state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
@@ -66,6 +68,8 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
             country: country,
             type: type,
             assignedFighterIds: assignedFighterIds,
+            latitude: latitude,
+            longitude: longitude,
           );
       state = state.copyWith(
         isLoading: false,
@@ -89,6 +93,8 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
     required String country,
     required String type,
     required List<String> assignedFighterIds,
+    double? latitude,
+    double? longitude,
   }) async {
     state =
         state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
@@ -103,6 +109,8 @@ class LocationMutationController extends StateNotifier<LocationMutationState> {
             country: country,
             type: type,
             assignedFighterIds: assignedFighterIds,
+            latitude: latitude,
+            longitude: longitude,
           );
       state = state.copyWith(
         isLoading: false,
