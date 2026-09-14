@@ -19,6 +19,7 @@ class Fighter {
     required this.disabled,
     required this.createdAt,
     required this.updatedAt,
+    this.createdBySource = '',
     this.testingWindowStart = '',
     this.testingWindowEnd = '',
   });
@@ -38,6 +39,10 @@ class Fighter {
   final bool disabled;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// 'admin' when created from this app; empty/other when self-registered
+  /// by the fighter via the mobile app.
+  final String createdBySource;
 
   /// Daily 60-minute testing collection window start (`HH:mm`).
   final String testingWindowStart;
@@ -84,6 +89,7 @@ class Fighter {
       disabled: disabled,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      createdBySource: createdBySource,
       testingWindowStart: testingWindowStart ?? this.testingWindowStart,
       testingWindowEnd: testingWindowEnd ?? this.testingWindowEnd,
     );
@@ -108,6 +114,7 @@ class Fighter {
       disabled: data['disabled'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      createdBySource: (data['createdBySource'] as String?)?.trim() ?? '',
     );
   }
 }

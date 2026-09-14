@@ -110,6 +110,7 @@ class FightersRepository {
         'country': country.trim(),
         'primaryContactPerson': primaryContactPerson.trim(),
         'disabled': disabled,
+        'createdBySource': 'admin',
         'createdAt': timestamp,
         'updatedAt': timestamp,
       });

@@ -10,6 +10,7 @@ import '../../../core/localization/localization_x.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../checkins/presentation/checkin_alert_listener.dart';
+import '../../fighters/presentation/fighter_signup_alert_listener.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({required this.child, super.key});
@@ -151,7 +152,9 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
         ),
-        body: CheckinAlertListener(child: child),
+        body: CheckinAlertListener(
+          child: FighterSignupAlertListener(child: child),
+        ),
       );
     }
 
@@ -191,7 +194,11 @@ class AdminShell extends ConsumerWidget {
             ),
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: CheckinAlertListener(child: child)),
+          Expanded(
+            child: CheckinAlertListener(
+              child: FighterSignupAlertListener(child: child),
+            ),
+          ),
         ],
       ),
     );

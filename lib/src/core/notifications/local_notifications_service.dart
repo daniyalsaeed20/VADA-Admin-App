@@ -101,4 +101,43 @@ class LocalNotificationsService {
       // Permission denied — dialog still shows.
     }
   }
+
+  Future<void> showFighterSignup({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    if (!_initialized) await initialize();
+
+    if (kIsWeb) {
+      browser.showBrowserNotification(title: title, body: body);
+      return;
+    }
+
+    const android = AndroidNotificationDetails(
+      'fighter_signups',
+      'Fighter sign-ups',
+      channelDescription: 'Alerts when a fighter creates their own account',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+    );
+    const darwin = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const details = NotificationDetails(
+      android: android,
+      iOS: darwin,
+      macOS: darwin,
+    );
+
+    try {
+      await _plugin.show(id, title, body, details);
+    } catch (_) {
+      // Permission denied — dialog still shows.
+    }
+  }
 }

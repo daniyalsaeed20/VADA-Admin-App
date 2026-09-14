@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onNotificationCreated = exports.onCheckinCreated = void 0;
+exports.onNotificationCreated = exports.onFighterUserCreated = exports.onCheckinCreated = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const firebase_functions_1 = require("firebase-functions");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
@@ -60,6 +60,45 @@ exports.onCheckinCreated = (0, firestore_1.onDocumentCreated)("checkins/{checkin
         updatedAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
     });
 });
+exports.onFighterUserCreated = (0, firestore_1.onDocumentCreated)("users/{userId}", async (event) => {
+    const snap = event.data;
+    if (!snap)
+        return;
+    const userId = event.params.userId;
+    const data = snap.data();
+    if (!data)
+        return;
+    const role = String(data.role ?? "").trim();
+    if (role !== "fighter")
+        return;
+    // Fighter accounts created by an admin (see fighters_repository.dart)
+    // are stamped with createdBySource: "admin" — skip those so admins
+    // are only alerted about self-service sign-ups from the mobile app.
+    const createdBySource = String(data.createdBySource ?? "").trim();
+    if (createdBySource === "admin")
+        return;
+    const settings = await loadNotificationSettings();
+    if (settings.enableFighterSignupAlerts === false) {
+        return;
+    }
+    const rawName = data.fullName ?? "";
+    const fighterName = rawName.trim() || "A fighter";
+    await db.collection("notifications").add({
+        type: "fighter_signup",
+        title: "New fighter registration",
+        body: `${fighterName} just created an account.`,
+        target: "admin",
+        targetUserId: "",
+        data: {
+            screen: "fighters",
+            fighterId: userId,
+        },
+        status: "pending",
+        createdBy: userId,
+        createdAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
+    });
+});
 exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notifications/{notificationId}", async (event) => {
     const snap = event.data;
     if (!snap)
@@ -70,7 +109,8 @@ exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("notification
         return;
     if (raw.type !== "admin_message" &&
         raw.type !== "schedule_update" &&
-        raw.type !== "fighter_checkin") {
+        raw.type !== "fighter_checkin" &&
+        raw.type !== "fighter_signup") {
         return;
     }
     const title = (raw.title ?? "").trim();

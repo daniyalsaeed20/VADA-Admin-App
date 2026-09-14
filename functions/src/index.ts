@@ -9,7 +9,8 @@ type NotificationStatus = "pending" | "processing" | "sent" | "failed";
 type NotificationType =
   | "admin_message"
   | "schedule_update"
-  | "fighter_checkin";
+  | "fighter_checkin"
+  | "fighter_signup";
 
 type NotificationRequest = {
   type: NotificationType;
@@ -27,6 +28,7 @@ type NotificationSettingsDoc = {
   enableFighterCheckinAlerts?: boolean;
   fighterCheckinTitleTemplate?: string;
   fighterCheckinBodyTemplate?: string;
+  enableFighterSignupAlerts?: boolean;
 };
 
 const db = admin.firestore();
@@ -100,6 +102,51 @@ export const onCheckinCreated = onDocumentCreated(
   },
 );
 
+export const onFighterUserCreated = onDocumentCreated(
+  "users/{userId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const userId = event.params.userId;
+    const data = snap.data() as Record<string, unknown> | undefined;
+    if (!data) return;
+
+    const role = String(data.role ?? "").trim();
+    if (role !== "fighter") return;
+
+    // Fighter accounts created by an admin (see fighters_repository.dart)
+    // are stamped with createdBySource: "admin" — skip those so admins
+    // are only alerted about self-service sign-ups from the mobile app.
+    const createdBySource = String(data.createdBySource ?? "").trim();
+    if (createdBySource === "admin") return;
+
+    const settings = await loadNotificationSettings();
+    if (settings.enableFighterSignupAlerts === false) {
+      return;
+    }
+
+    const rawName = (data.fullName as string | undefined) ?? "";
+    const fighterName = rawName.trim() || "A fighter";
+
+    await db.collection("notifications").add({
+      type: "fighter_signup",
+      title: "New fighter registration",
+      body: `${fighterName} just created an account.`,
+      target: "admin",
+      targetUserId: "",
+      data: {
+        screen: "fighters",
+        fighterId: userId,
+      },
+      status: "pending",
+      createdBy: userId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  },
+);
+
 export const onNotificationCreated = onDocumentCreated(
   "notifications/{notificationId}",
   async (event) => {
@@ -113,7 +160,8 @@ export const onNotificationCreated = onDocumentCreated(
     if (
       raw.type !== "admin_message" &&
       raw.type !== "schedule_update" &&
-      raw.type !== "fighter_checkin"
+      raw.type !== "fighter_checkin" &&
+      raw.type !== "fighter_signup"
     ) {
       return;
     }

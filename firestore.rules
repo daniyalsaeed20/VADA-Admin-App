@@ -26,6 +26,30 @@ service cloud.firestore {
           && userDoc().data.role == 'fighter';
     }
 
+    // Lets a mobile-app user self-provision their own fighter profile on
+    // sign-up. Locks role to 'fighter' and disabled to false so a client
+    // can't grant itself admin or bypass the account-disable switch; the
+    // account still goes live immediately (no admin approval step).
+    function isValidFighterSelfCreate(userId) {
+      let data = request.resource.data;
+      return isSelf(userId)
+          && data.role == 'fighter'
+          && data.disabled == false
+          && data.fullName is string
+          && data.dateOfBirth is string
+          && data.gender is string
+          && data.phone is string
+          && data.email is string
+          && data.address is string
+          && data.city is string
+          && data.stateCounty is string
+          && data.postalCode is string
+          && data.country is string
+          && data.primaryContactPerson is string
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+    }
+
     function fighterOwnsResource() {
       return resource.data.keys().hasAll(['fighterId'])
           && resource.data.fighterId == request.auth.uid;
@@ -146,7 +170,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAdmin() || isSelf(userId);
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin() || isValidFighterSelfCreate(userId);
+      allow update, delete: if isAdmin();
 
       match /deviceTokens/{tokenId} {
         allow read: if isAdmin() || isSelf(userId);

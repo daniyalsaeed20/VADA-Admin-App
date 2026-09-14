@@ -14,6 +14,7 @@ class NotificationSettings {
     required this.enableFighterCheckinAlerts,
     required this.fighterCheckinTitleTemplate,
     required this.fighterCheckinBodyTemplate,
+    required this.enableFighterSignupAlerts,
     required this.updatedAt,
   });
 
@@ -29,6 +30,7 @@ class NotificationSettings {
   final bool enableFighterCheckinAlerts;
   final String fighterCheckinTitleTemplate;
   final String fighterCheckinBodyTemplate;
+  final bool enableFighterSignupAlerts;
   final DateTime? updatedAt;
 
   factory NotificationSettings.defaults() {
@@ -45,6 +47,7 @@ class NotificationSettings {
       enableFighterCheckinAlerts: true,
       fighterCheckinTitleTemplate: '',
       fighterCheckinBodyTemplate: '',
+      enableFighterSignupAlerts: true,
       updatedAt: null,
     );
   }
@@ -76,6 +79,8 @@ class NotificationSettings {
           (data['fighterCheckinTitleTemplate'] as String? ?? '').trim(),
       fighterCheckinBodyTemplate:
           (data['fighterCheckinBodyTemplate'] as String? ?? '').trim(),
+      enableFighterSignupAlerts:
+          (data['enableFighterSignupAlerts'] as bool?) ?? true,
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -98,6 +103,7 @@ class NotificationSettings {
       'enableFighterCheckinAlerts': enableFighterCheckinAlerts,
       'fighterCheckinTitleTemplate': fighterCheckinTitleTemplate.trim(),
       'fighterCheckinBodyTemplate': fighterCheckinBodyTemplate.trim(),
+      'enableFighterSignupAlerts': enableFighterSignupAlerts,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -115,6 +121,7 @@ class NotificationSettings {
     bool? enableFighterCheckinAlerts,
     String? fighterCheckinTitleTemplate,
     String? fighterCheckinBodyTemplate,
+    bool? enableFighterSignupAlerts,
   }) {
     return NotificationSettings(
       enableAdminMessages: enableAdminMessages ?? this.enableAdminMessages,
@@ -139,6 +146,8 @@ class NotificationSettings {
           fighterCheckinTitleTemplate ?? this.fighterCheckinTitleTemplate,
       fighterCheckinBodyTemplate:
           fighterCheckinBodyTemplate ?? this.fighterCheckinBodyTemplate,
+      enableFighterSignupAlerts:
+          enableFighterSignupAlerts ?? this.enableFighterSignupAlerts,
       updatedAt: updatedAt,
     );
   }
