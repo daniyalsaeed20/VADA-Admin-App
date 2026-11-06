@@ -4,9 +4,11 @@ import '../../../../core/theme/app_layout.dart';
 import '../../domain/approve_location_setup.dart';
 import '../../domain/schedule_change_approve_helpers.dart';
 import '../../domain/schedule_change_request.dart';
+import '../../../locations/domain/location_lookup.dart';
 import '../../../locations/domain/location_record.dart';
+import '../../../shared/presentation/map_link_button.dart';
 
-enum _LocationSetupMode { createNew, useExisting }
+enum _LocationSetupMode { fighterLocation, createNew, useExisting }
 
 /// Guided approve: create/link a testing location and optionally create a schedule row.
 Future<ApproveSetupDialogResult?> showApproveScheduleChangeSetupDialog({
@@ -52,6 +54,24 @@ class _ApproveScheduleChangeSetupDialogState
   bool _createScheduleIfMissing = true;
 
   bool get _showLocationSection => needsApproveLocationSetup(widget.request);
+
+  /// The point the fighter picked on the map in the mobile app, if any.
+  MapCoordinates? get _fighterPin =>
+      readPickedCoordinates(widget.request.requestedChanges);
+
+  /// Map button for the directory location currently picked in the dropdown
+  /// (mirrors the dropdown's fallback to the first location).
+  Widget _selectedLocationMapButton() {
+    final selected = findLocationRecord(
+          locations: widget.locations,
+          id: _existingLocationId,
+        ) ??
+        (widget.locations.isEmpty ? null : widget.locations.first);
+    return MapLinkButton(
+      latitude: selected?.latitude,
+      longitude: selected?.longitude,
+    );
+  }
   bool get _showScheduleCreate => needsCreateScheduleOnApprove(widget.request);
 
   @override
@@ -86,6 +106,10 @@ class _ApproveScheduleChangeSetupDialogState
     if (requestedId.isNotEmpty && ids.contains(requestedId)) {
       _mode = _LocationSetupMode.useExisting;
       _existingLocationId = requestedId;
+    } else if (_fighterPin != null) {
+      _mode = _LocationSetupMode.fighterLocation;
+      _existingLocationId =
+          widget.locations.isEmpty ? null : widget.locations.first.id;
     } else if (readRequestedNewSiteSummary(changes).trim().isNotEmpty) {
       _mode = _LocationSetupMode.createNew;
       _existingLocationId =
@@ -133,13 +157,19 @@ class _ApproveScheduleChangeSetupDialogState
                 if (_showLocationSection) ...[
                   SizedBox(height: AppLayout.mediumGap(context)),
                   SegmentedButton<_LocationSetupMode>(
-                    segments: const [
-                      ButtonSegment(
+                    segments: [
+                      if (_fighterPin != null)
+                        const ButtonSegment(
+                          value: _LocationSetupMode.fighterLocation,
+                          label: Text('Fighter’s pin'),
+                          icon: Icon(Icons.push_pin_outlined),
+                        ),
+                      const ButtonSegment(
                         value: _LocationSetupMode.createNew,
                         label: Text('New site'),
                         icon: Icon(Icons.add_location_alt_outlined),
                       ),
-                      ButtonSegment(
+                      const ButtonSegment(
                         value: _LocationSetupMode.useExisting,
                         label: Text('Existing'),
                         icon: Icon(Icons.place_outlined),
@@ -161,7 +191,31 @@ class _ApproveScheduleChangeSetupDialogState
                     },
                   ),
                   SizedBox(height: AppLayout.mediumGap(context)),
-                  if (_mode == _LocationSetupMode.createNew) ...[
+                  if (_mode == _LocationSetupMode.fighterLocation) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            readRequestedNewSiteSummary(
+                              widget.request.requestedChanges,
+                            ),
+                          ),
+                        ),
+                        MapLinkButton(
+                          latitude: _fighterPin?.latitude,
+                          longitude: _fighterPin?.longitude,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppLayout.smallGap(context)),
+                    Text(
+                      'The schedule will use the location the fighter picked '
+                      'on the map. It won’t be added to the Locations directory.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ] else if (_mode == _LocationSetupMode.createNew) ...[
                     TextFormField(
                       controller: _nameController,
                       decoration: const InputDecoration(
@@ -221,9 +275,10 @@ class _ApproveScheduleChangeSetupDialogState
                             : (widget.locations.isEmpty
                                 ? null
                                 : widget.locations.first.id),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Testing location',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: _selectedLocationMapButton(),
                         ),
                         items: widget.locations
                             .map(
@@ -284,11 +339,17 @@ class _ApproveScheduleChangeSetupDialogState
 
     ApproveLocationSetup? locationSetup;
     if (_showLocationSection) {
-      if (_mode == _LocationSetupMode.createNew) {
+      if (_mode == _LocationSetupMode.fighterLocation) {
+        locationSetup = const ApproveLocationSetup.fighterLocation();
+      } else if (_mode == _LocationSetupMode.createNew) {
+        // Save the fighter's map pin (if any) as the new site's coordinates.
+        final pin = _fighterPin;
         locationSetup = ApproveLocationSetup.create(
           locationName: _nameController.text,
           locationAddress: _addressController.text,
           locationType: _selectedType,
+          latitude: pin?.latitude,
+          longitude: pin?.longitude,
         );
       } else {
         final id = _existingLocationId?.trim() ?? '';

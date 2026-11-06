@@ -10,7 +10,9 @@ import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../../locations/presentation/locations_controller.dart';
+import '../../locations/domain/location_lookup.dart';
 import '../../locations/domain/location_record.dart';
+import '../../shared/presentation/map_link_button.dart';
 import '../../contacts/presentation/contacts_controller.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../domain/approve_location_setup.dart';
@@ -1099,7 +1101,7 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
 
     final canAct = request.isPending && !mutation.isLoading;
     final newSiteSummary =
-        readRequestedNewSiteSummary(request.requestedChanges);
+        readProposedNewSiteSummary(request.requestedChanges);
 
     return AlertDialog(
       title: Text('${request.requestTypeLabel} • ${request.statusLabel}'),
@@ -1148,6 +1150,7 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                 liveSchedule: liveScheduleAsync.asData?.value,
                 locationNameById: locationNameById,
                 contactNameById: contactNameById,
+                locations: locations,
               ),
               SizedBox(height: AppLayout.mediumGap(context)),
               _ChangeComparisonSection(
@@ -1156,6 +1159,7 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                 liveSchedule: liveScheduleAsync.asData?.value,
                 locationNameById: locationNameById,
                 proposedLocationText: newSiteSummary,
+                locations: locations,
               ),
               if (newSiteSummary.isNotEmpty) ...[
                 SizedBox(height: AppLayout.mediumGap(context)),
@@ -1177,7 +1181,19 @@ class _RequestDetailDialogState extends ConsumerState<_RequestDetailDialog> {
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                       SizedBox(height: AppLayout.smallGap(context)),
-                      Text(newSiteSummary),
+                      Row(
+                        children: [
+                          Expanded(child: Text(newSiteSummary)),
+                          MapLinkButton(
+                            latitude: readPickedCoordinates(
+                              request.requestedChanges,
+                            )?.latitude,
+                            longitude: readPickedCoordinates(
+                              request.requestedChanges,
+                            )?.longitude,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -1312,6 +1328,7 @@ class _ScheduleSection extends StatelessWidget {
     required this.liveSchedule,
     required this.locationNameById,
     required this.contactNameById,
+    required this.locations,
   });
 
   final String title;
@@ -1319,6 +1336,7 @@ class _ScheduleSection extends StatelessWidget {
   final WhereaboutsEntry? liveSchedule;
   final Map<String, String> locationNameById;
   final Map<String, String> contactNameById;
+  final List<LocationRecord> locations;
 
   @override
   Widget build(BuildContext context) {
@@ -1351,9 +1369,24 @@ class _ScheduleSection extends StatelessWidget {
             ),
           ),
         SizedBox(height: AppLayout.smallGap(context)),
-        ...fields.entries.map(
-          (e) => _DetailRow(label: e.key, value: e.value),
-        ),
+        ...fields.entries.map((e) {
+          if (e.key != 'Location') {
+            return _DetailRow(label: e.key, value: e.value);
+          }
+          final mapLocation = _currentScheduleLocation(
+            snapshot: snapshot,
+            entry: liveSchedule,
+            locations: locations,
+          );
+          return _DetailRow(
+            label: e.key,
+            value: e.value,
+            trailing: MapLinkButton(
+              latitude: mapLocation?.latitude,
+              longitude: mapLocation?.longitude,
+            ),
+          );
+        }),
       ],
     );
   }
@@ -1366,6 +1399,7 @@ class _ChangeComparisonSection extends StatelessWidget {
     required this.liveSchedule,
     required this.locationNameById,
     required this.proposedLocationText,
+    required this.locations,
   });
 
   final Map<String, dynamic> currentSnapshot;
@@ -1373,6 +1407,7 @@ class _ChangeComparisonSection extends StatelessWidget {
   final WhereaboutsEntry? liveSchedule;
   final Map<String, String> locationNameById;
   final String proposedLocationText;
+  final List<LocationRecord> locations;
 
   @override
   Widget build(BuildContext context) {
@@ -1461,7 +1496,30 @@ class _ChangeComparisonSection extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: Text('${row.current} → ${row.requested}'),
+                  child: row.label == 'Location'
+                      ? _LocationCompareValue(
+                          current: row.current,
+                          requested: row.requested,
+                          currentLocation: _currentScheduleLocation(
+                            snapshot: currentSnapshot,
+                            entry: liveSchedule,
+                            locations: locations,
+                          ),
+                          requestedLocation: proposedLocationText.isNotEmpty
+                              ? readPickedCoordinates(requestedChanges)
+                              : coordinatesOf(
+                                  findLocationRecord(
+                                    locations: locations,
+                                    id: readScheduleField(requestedChanges, const [
+                                      'locationId',
+                                      'selectedLocation',
+                                    ]),
+                                    name: readScheduleField(requestedChanges,
+                                        const ['locationName', 'location']),
+                                  ),
+                                ),
+                        )
+                      : Text('${row.current} → ${row.requested}'),
                 ),
               ],
             ),
@@ -1470,6 +1528,74 @@ class _ChangeComparisonSection extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "current [map] → requested [map]" for the Location comparison row.
+class _LocationCompareValue extends StatelessWidget {
+  const _LocationCompareValue({
+    required this.current,
+    required this.requested,
+    required this.currentLocation,
+    required this.requestedLocation,
+  });
+
+  final String current;
+  final String requested;
+  final MapCoordinates? currentLocation;
+  final MapCoordinates? requestedLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(current),
+        MapLinkButton(
+          latitude: currentLocation?.latitude,
+          longitude: currentLocation?.longitude,
+        ),
+        const Text('→ '),
+        Text(requested),
+        MapLinkButton(
+          latitude: requestedLocation?.latitude,
+          longitude: requestedLocation?.longitude,
+        ),
+      ],
+    );
+  }
+}
+
+/// Coordinates for the request's current schedule (live row first, then the
+/// snapshot captured when the request was made): the fighter's own map pin
+/// when they picked one, otherwise the matching directory location.
+MapCoordinates? _currentScheduleLocation({
+  required Map<String, dynamic> snapshot,
+  required WhereaboutsEntry? entry,
+  required List<LocationRecord> locations,
+}) {
+  if (entry != null) {
+    return entry.pickedCoordinates ??
+        coordinatesOf(
+          findLocationRecord(
+            locations: locations,
+            id: entry.locationId,
+            name: entry.locationName,
+          ),
+        );
+  }
+  if (snapshot['locationSource'] == 'custom') {
+    final picked = readPickedCoordinates(snapshot);
+    if (picked != null) {
+      return picked;
+    }
+  }
+  return coordinatesOf(
+    findLocationRecord(
+      locations: locations,
+      id: readScheduleField(snapshot, const ['locationId', 'selectedLocation']),
+      name: readScheduleField(snapshot, const ['locationName', 'location']),
+    ),
+  );
 }
 
 class _CompareRow {
@@ -1545,10 +1671,11 @@ Map<String, String> _resolveScheduleFields({
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({required this.label, required this.value, this.trailing});
 
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1567,6 +1694,7 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           Expanded(child: Text(value)),
+          ?trailing,
         ],
       ),
     );

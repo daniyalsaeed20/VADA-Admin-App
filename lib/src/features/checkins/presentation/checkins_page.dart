@@ -16,6 +16,7 @@ import '../../fighters/presentation/fighters_controller.dart';
 import '../../locations/domain/location_record.dart';
 import '../../locations/presentation/locations_controller.dart';
 import '../../shared/data/google_geocoding_service.dart';
+import '../../shared/presentation/map_link_button.dart';
 import '../domain/checkin_record.dart';
 import 'checkins_controller.dart';
 
@@ -710,6 +711,10 @@ class _CheckinsPageState extends ConsumerState<CheckinsPage> {
               ),
               _DetailRow(
                 label: 'Address',
+                trailing: MapLinkButton(
+                  latitude: record.latitude,
+                  longitude: record.longitude,
+                ),
                 valueWidget: _ReverseGeocodedLocation(
                   latitude: record.latitude,
                   longitude: record.longitude,
@@ -1543,11 +1548,17 @@ class _Pagination extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, this.value = '', this.valueWidget});
+  const _DetailRow({
+    required this.label,
+    this.value = '',
+    this.valueWidget,
+    this.trailing,
+  });
 
   final String label;
   final String value;
   final Widget? valueWidget;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1570,6 +1581,7 @@ class _DetailRow extends StatelessWidget {
                 valueWidget ??
                 Text(value, style: Theme.of(context).textTheme.bodyMedium),
           ),
+          ?trailing,
         ],
       ),
     );

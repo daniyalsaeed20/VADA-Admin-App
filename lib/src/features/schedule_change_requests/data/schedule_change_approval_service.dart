@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/firestore_collections.dart';
 import '../../locations/data/locations_repository.dart';
+import '../../locations/domain/location_lookup.dart';
 import '../../whereabouts/data/whereabouts_repository.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../domain/approve_location_setup.dart';
@@ -36,7 +37,10 @@ class ScheduleChangeApprovalService {
     final changes = Map<String, dynamic>.from(request.requestedChanges);
     var scheduleId = request.scheduleId?.trim() ?? '';
 
-    if (options.locationSetup != null) {
+    if (options.locationSetup?.useFighterLocation ?? false) {
+      // The schedule keeps the fighter's own map pin (see ScheduleApplyMapper).
+      changes['locationId'] = '';
+    } else if (options.locationSetup != null) {
       final resolved = await _resolveLocation(
         setup: options.locationSetup!,
         fighterId: request.fighterId,
@@ -104,6 +108,8 @@ class ScheduleChangeApprovalService {
         address: setup.locationAddress,
         type: setup.locationType,
         assignedFighterIds: [fighterId],
+        latitude: setup.latitude,
+        longitude: setup.longitude,
       );
       return (locationId: id, locationName: setup.locationName.trim());
     }
@@ -153,7 +159,7 @@ class ScheduleChangeApprovalService {
     }
 
     final locationId = readScheduleField(changes, const ['locationId']);
-    if (locationId.isEmpty) {
+    if (locationId.isEmpty && readPickedCoordinates(changes) == null) {
       throw StateError('Cannot create schedule: assign or create a location first.');
     }
 

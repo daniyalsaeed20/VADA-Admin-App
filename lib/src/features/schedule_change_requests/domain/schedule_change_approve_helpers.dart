@@ -45,18 +45,36 @@ String readRequestedNewSiteSummary(Map<String, dynamic> changes) {
   return '$name\n$addr';
 }
 
+/// Whether the fighter picked a location from the directory (the mobile app
+/// then also sends that location's `locationName` / `locationAddress`).
+bool hasRequestedDirectoryLocation(Map<String, dynamic> changes) {
+  return readScheduleField(
+    changes,
+    const ['locationId', 'selectedLocation'],
+  ).isNotEmpty;
+}
+
+/// Summary of a new site the fighter proposed, or empty when they picked a
+/// directory location instead (its name/address are not a "new site").
+String readProposedNewSiteSummary(Map<String, dynamic> changes) {
+  if (hasRequestedDirectoryLocation(changes)) {
+    return '';
+  }
+  return readRequestedNewSiteSummary(changes);
+}
+
 /// Whether admin must confirm location directory setup before approve.
+///
+/// For every request type, a location the fighter picked from the directory
+/// needs no setup. A "new / testing location" request without one always
+/// needs setup; other types only when the fighter proposed a new site.
 bool needsApproveLocationSetup(ScheduleChangeRequest request) {
-  if (request.requestType == ScheduleChangeRequestType.newLocation) {
-    return true;
+  if (hasRequestedDirectoryLocation(request.requestedChanges)) {
+    return false;
   }
 
-  final locationId = readScheduleField(
-    request.requestedChanges,
-    const ['locationId', 'selectedLocation'],
-  );
-  if (locationId.isNotEmpty) {
-    return false;
+  if (request.requestType == ScheduleChangeRequestType.newLocation) {
+    return true;
   }
 
   return readRequestedNewSiteSummary(request.requestedChanges).isNotEmpty;

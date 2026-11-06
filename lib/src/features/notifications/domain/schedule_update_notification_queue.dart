@@ -32,6 +32,7 @@ class ScheduleUpdateNotificationQueue {
     required String startTime,
     required String endTime,
     required String locationId,
+    String locationName = '',
     required String contactId,
     required String recurrence,
     required String notes,
@@ -42,7 +43,10 @@ class ScheduleUpdateNotificationQueue {
     }
 
     final fighterName = await _resolver.fighterName(fighterId);
-    final locationName = await _resolver.locationName(locationId);
+    // A fighter's own map location has no directory id, only a name.
+    final resolvedLocationName = locationName.trim().isNotEmpty
+        ? locationName.trim()
+        : await _resolver.locationName(locationId);
     final contactName = await _resolver.contactName(contactId);
 
     final message = NotificationMessageComposer.composeScheduleUpdate(
@@ -51,7 +55,7 @@ class ScheduleUpdateNotificationQueue {
       date: date,
       startTime: startTime,
       endTime: endTime,
-      locationName: locationName,
+      locationName: resolvedLocationName,
       contactName: contactName,
       recurrence: recurrence,
       notes: notes,

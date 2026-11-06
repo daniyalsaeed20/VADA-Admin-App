@@ -37,6 +37,7 @@ class WhereaboutsRepository {
     required String startTime,
     required String endTime,
     required String locationId,
+    String locationName = '',
     required String contactId,
     required String notes,
     required String recurrence,
@@ -56,6 +57,8 @@ class WhereaboutsRepository {
       if (window != null) 'startAt': Timestamp.fromDate(window.start),
       if (window != null) 'endAt': Timestamp.fromDate(window.end),
       'locationId': locationId.trim(),
+      if (locationId.trim().isNotEmpty) 'locationSource': 'assigned',
+      if (locationName.trim().isNotEmpty) 'locationName': locationName.trim(),
       'contactId': contactId.trim(),
       'notes': notes.trim(),
       'recurrence': normalizedRecurrence,
@@ -73,6 +76,8 @@ class WhereaboutsRepository {
     required String startTime,
     required String endTime,
     required String locationId,
+    required String locationName,
+    bool keepOwnLocation = false,
     required String contactId,
     required String notes,
     required String recurrence,
@@ -90,7 +95,12 @@ class WhereaboutsRepository {
       'endTime': endTime.trim(),
       if (window != null) 'startAt': Timestamp.fromDate(window.start),
       if (window != null) 'endAt': Timestamp.fromDate(window.end),
-      'locationId': locationId.trim(),
+      // Keeping the fighter's own map location leaves its fields untouched.
+      if (!keepOwnLocation) ...{
+        'locationId': locationId.trim(),
+        'locationName': locationName.trim(),
+        ...directoryLocationPatch(),
+      },
       'contactId': contactId.trim(),
       'notes': notes.trim(),
       'recurrence': normalizedRecurrence,
@@ -99,6 +109,18 @@ class WhereaboutsRepository {
     }, SetOptions(merge: true));
   }
 }
+
+/// Marks a schedule as using a directory location and clears the fields the
+/// mobile app stores for a location the fighter picked on the map.
+Map<String, dynamic> directoryLocationPatch() => {
+      'locationSource': 'assigned',
+      'locationLatitude': null,
+      'locationLongitude': null,
+      'locationCity': null,
+      'locationStateCounty': null,
+      'locationPostalCode': null,
+      'locationCountry': null,
+    };
 
 class _TimeWindow {
   const _TimeWindow({required this.start, required this.end});

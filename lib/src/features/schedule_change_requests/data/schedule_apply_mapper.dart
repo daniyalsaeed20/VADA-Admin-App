@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/firestore_collections.dart';
+import '../../locations/domain/location_lookup.dart';
+import '../../whereabouts/data/whereabouts_repository.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../domain/schedule_change_approve_helpers.dart';
 import '../domain/schedule_change_request.dart';
@@ -71,10 +73,13 @@ class ScheduleApplyMapper {
     );
     _putString(patch, 'locationName', locationName);
 
-    final explicitProposed = readScheduleField(requestedChanges, const [
-      'proposedLocationText',
-    ]);
-    final summary = readRequestedNewSiteSummary(requestedChanges);
+    // Only a new site the fighter proposed is stored as proposedLocationText;
+    // a directory location's name/address are not a proposal.
+    final isDirectoryLocation = locationId.isNotEmpty;
+    final explicitProposed = isDirectoryLocation
+        ? ''
+        : readScheduleField(requestedChanges, const ['proposedLocationText']);
+    final summary = readProposedNewSiteSummary(requestedChanges);
     if (explicitProposed.isNotEmpty) {
       _putString(patch, 'proposedLocationText', explicitProposed);
     } else if (summary.isNotEmpty) {
@@ -121,6 +126,19 @@ class ScheduleApplyMapper {
     }
 
     patch.removeWhere((key, value) => value == null);
+
+    // Keep the schedule's location source in sync with the mobile app: a
+    // directory location clears any old map pin, while a location the fighter
+    // picked on the map (no directory id) is stored with its coordinates.
+    final picked = readPickedCoordinates(requestedChanges);
+    if (locationId.isNotEmpty) {
+      patch.addAll(directoryLocationPatch());
+    } else if (picked != null) {
+      patch['locationId'] = null;
+      patch['locationSource'] = 'custom';
+      patch['locationLatitude'] = picked.latitude;
+      patch['locationLongitude'] = picked.longitude;
+    }
     return patch;
   }
 

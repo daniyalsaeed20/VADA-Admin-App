@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../locations/domain/location_lookup.dart';
+
 class WhereaboutsEntry {
   const WhereaboutsEntry({
     required this.id,
@@ -14,6 +16,7 @@ class WhereaboutsEntry {
     required this.recurrence,
     required this.createdAt,
     required this.updatedAt,
+    this.pickedCoordinates,
   });
 
   final String id;
@@ -28,6 +31,12 @@ class WhereaboutsEntry {
   final String recurrence;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Set when the fighter picked their own location on the map in the mobile
+  /// app instead of a location from the directory.
+  final MapCoordinates? pickedCoordinates;
+
+  bool get isOwnLocation => pickedCoordinates != null;
 
   factory WhereaboutsEntry.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -64,6 +73,9 @@ class WhereaboutsEntry {
       ),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      pickedCoordinates: data['locationSource'] == 'custom'
+          ? readPickedCoordinates(data)
+          : null,
     );
   }
 }

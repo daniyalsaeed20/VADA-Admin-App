@@ -10,8 +10,10 @@ import '../../contacts/domain/contact.dart';
 import '../../contacts/presentation/contacts_controller.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
+import '../../locations/domain/location_lookup.dart';
 import '../../locations/domain/location_record.dart';
 import '../../locations/presentation/locations_controller.dart';
+import '../../shared/presentation/map_link_button.dart';
 import '../../whereabouts/domain/whereabouts_entry.dart';
 import '../../whereabouts/presentation/whereabouts_controller.dart';
 
@@ -200,8 +202,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       contactNameById[c.id] = c.name;
     }
     final locationNameById = <String, String>{};
+    final locationById = <String, LocationRecord>{};
     for (final l in locationsAsync.asData?.value ?? const <LocationRecord>[]) {
       locationNameById[l.id] = l.name;
+      locationById[l.id] = l;
     }
 
     String fighterName(String uid) {
@@ -211,8 +215,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       return uid;
     }
 
-    String locationName(String id) =>
-        locationNameById[id] ?? (id.trim().isEmpty ? '—' : id);
+    String locationName(WhereaboutsEntry e) {
+      final name = resolveLocationDisplay(e, locationNameById);
+      return name.isEmpty ? '—' : name;
+    }
     String contactName(String id) =>
         contactNameById[id] ?? (id.trim().isEmpty ? '—' : id);
 
@@ -393,7 +399,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               e.startTime,
               e.endTime,
               fighterName(e.fighterId),
-              locationName(e.locationId),
+              locationName(e),
               contactName(e.contactId),
               e.notes,
             ].map(_csvEscape).join(',')),
@@ -438,21 +444,24 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     showCheckboxColumn: false,
-                    columns: const [
-                      DataColumn(label: Text('Date')),
-                      DataColumn(label: Text('Time')),
-                      DataColumn(label: Text('Fighter')),
-                      DataColumn(label: Text('Location')),
-                      DataColumn(label: Text('Contact')),
-                      DataColumn(label: Text('Notes')),
+                    columns: [
+                      const DataColumn(label: Text('Date')),
+                      const DataColumn(label: Text('Time')),
+                      const DataColumn(label: Text('Fighter')),
+                      const DataColumn(label: Text('Location')),
+                      const DataColumn(label: Text('Contact')),
+                      const DataColumn(label: Text('Notes')),
+                      DataColumn(label: Text(loc.tr('common.map'))),
                     ],
                     rows: filtered.take(250).map((e) {
+                      final mapLocation = e.pickedCoordinates ??
+                          coordinatesOf(locationById[e.locationId]);
                       return DataRow(
                         cells: [
                           DataCell(Text(e.date)),
                           DataCell(Text('${e.startTime}-${e.endTime}')),
                           DataCell(Text(fighterName(e.fighterId))),
-                          DataCell(Text(locationName(e.locationId))),
+                          DataCell(Text(locationName(e))),
                           DataCell(Text(contactName(e.contactId))),
                           DataCell(
                             SizedBox(
@@ -462,6 +471,12 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                          ),
+                          DataCell(
+                            MapLinkButton(
+                              latitude: mapLocation?.latitude,
+                              longitude: mapLocation?.longitude,
                             ),
                           ),
                         ],

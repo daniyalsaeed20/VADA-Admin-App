@@ -11,6 +11,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../../shared/data/google_geocoding_service.dart';
+import '../../shared/presentation/map_link_button.dart';
 import '../domain/location_record.dart';
 import 'locations_controller.dart';
 
@@ -168,6 +169,10 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                                                     .titleMedium,
                                               ),
                                             ),
+                                            MapLinkButton(
+                                              latitude: item.latitude,
+                                              longitude: item.longitude,
+                                            ),
                                             IconButton(
                                               tooltip: loc.tr('locations.edit'),
                                               onPressed: () => _openEditDialog(
@@ -228,6 +233,9 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                                       ),
                                     ),
                                     DataColumn(
+                                      label: Text(loc.tr('common.map')),
+                                    ),
+                                    DataColumn(
                                       label: Text(loc.tr('locations.actions')),
                                     ),
                                   ],
@@ -262,6 +270,12 @@ class _LocationsPageState extends ConsumerState<LocationsPage> {
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          MapLinkButton(
+                                            latitude: item.latitude,
+                                            longitude: item.longitude,
                                           ),
                                         ),
                                         DataCell(

@@ -11,7 +11,9 @@ import '../../contacts/presentation/contacts_controller.dart';
 import '../../fighters/domain/fighter.dart';
 import '../../fighters/presentation/fighters_controller.dart';
 import '../../locations/domain/location_record.dart';
+import '../../locations/domain/location_lookup.dart';
 import '../../locations/presentation/locations_controller.dart';
+import '../../shared/presentation/map_link_button.dart';
 import '../domain/whereabouts_entry.dart';
 import 'whereabouts_controller.dart';
 
@@ -60,6 +62,11 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
       for (final location
           in locationsAsync.asData?.value ?? const <LocationRecord>[])
         location.id: location.name,
+    };
+    final locationsById = {
+      for (final location
+          in locationsAsync.asData?.value ?? const <LocationRecord>[])
+        location.id: location,
     };
     final width = MediaQuery.sizeOf(context).width;
     final isNarrow = width < 980;
@@ -143,6 +150,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                     fighterNames: fighterNames,
                     contactNames: contactNames,
                     locationNames: locationNames,
+                    locationsById: locationsById,
                     isNarrow: isNarrow,
                     visibleMonth: _visibleMonth,
                     selectedDay: _selectedDay,
@@ -201,6 +209,8 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                   locationNames,
                                   loc.tr('whereabouts.na'),
                                 );
+                                final mapLocation =
+                                    _resolveLocation(item, locationsById);
                                 final contactName =
                                     contactNames[item.contactId] ??
                                         loc.tr('whereabouts.na');
@@ -212,6 +222,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                       item: item,
                                       fighterName: fighterName,
                                       locationName: locationName,
+                                      mapLocation: mapLocation,
                                       contactName: contactName,
                                       onEdit: () => _openEditDialog(
                                         item: item,
@@ -241,6 +252,11 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                                       .titleMedium,
                                                 ),
                                               ),
+                                              MapLinkButton(
+                                                latitude: mapLocation?.latitude,
+                                                longitude:
+                                                    mapLocation?.longitude,
+                                              ),
                                               IconButton(
                                                 tooltip:
                                                     loc.tr('whereabouts.edit'),
@@ -265,7 +281,10 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                           Text(
                                             '${item.startTime} - ${item.endTime}',
                                           ),
-                                          Text(locationName),
+                                          _LocationText(
+                                            entry: item,
+                                            name: locationName,
+                                          ),
                                           Text(contactName),
                                           SizedBox(
                                             height: AppLayout.smallGap(context),
@@ -310,6 +329,9 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                     ),
                                   ),
                                   DataColumn(
+                                    label: Text(loc.tr('common.map')),
+                                  ),
+                                  DataColumn(
                                     label: Text(loc.tr('whereabouts.actions')),
                                   ),
                                 ],
@@ -322,6 +344,8 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                     locationNames,
                                     loc.tr('whereabouts.na'),
                                   );
+                                  final mapLocation =
+                                      _resolveLocation(item, locationsById);
                                   final contactName =
                                       contactNames[item.contactId] ??
                                           loc.tr('whereabouts.na');
@@ -331,6 +355,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                       item: item,
                                       fighterName: fighterName,
                                       locationName: locationName,
+                                      mapLocation: mapLocation,
                                       contactName: contactName,
                                       onEdit: () => _openEditDialog(
                                         item: item,
@@ -350,13 +375,24 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                           '${item.startTime} - ${item.endTime}',
                                         ),
                                       ),
-                                      DataCell(Text(locationName)),
+                                      DataCell(
+                                        _LocationText(
+                                          entry: item,
+                                          name: locationName,
+                                        ),
+                                      ),
                                       DataCell(Text(contactName)),
                                       DataCell(
                                         Text(
                                           loc.tr(
                                             _recurrenceLabelKey(item.recurrence),
                                           ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        MapLinkButton(
+                                          latitude: mapLocation?.latitude,
+                                          longitude: mapLocation?.longitude,
                                         ),
                                       ),
                                       DataCell(
@@ -473,6 +509,7 @@ Future<void> _openDetailsDialog({
   required WhereaboutsEntry item,
   required String fighterName,
   required String locationName,
+  required MapCoordinates? mapLocation,
   required String contactName,
   required VoidCallback onEdit,
 }) async {
@@ -482,6 +519,7 @@ Future<void> _openDetailsDialog({
       item: item,
       fighterName: fighterName,
       locationName: locationName,
+      mapLocation: mapLocation,
       contactName: contactName,
       onEdit: onEdit,
     ),
@@ -630,6 +668,7 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
     required this.fighterNames,
     required this.contactNames,
     required this.locationNames,
+    required this.locationsById,
     required this.isNarrow,
     required this.visibleMonth,
     required this.selectedDay,
@@ -642,6 +681,7 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
   final Map<String, String> fighterNames;
   final Map<String, String> contactNames;
   final Map<String, String> locationNames;
+  final Map<String, LocationRecord> locationsById;
   final bool isNarrow;
   final DateTime visibleMonth;
   final DateTime selectedDay;
@@ -764,6 +804,7 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
                     item: entry,
                     fighterName: fighterName,
                     locationName: locationName,
+                    mapLocation: _resolveLocation(entry, locationsById),
                     contactName: contactName,
                     onEdit: () => onEditEntry(entry),
                   ),
@@ -928,6 +969,7 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
     required this.item,
     required this.fighterName,
     required this.locationName,
+    required this.mapLocation,
     required this.contactName,
     required this.onEdit,
   });
@@ -935,6 +977,7 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
   final WhereaboutsEntry item;
   final String fighterName;
   final String locationName;
+  final MapCoordinates? mapLocation;
   final String contactName;
   final VoidCallback onEdit;
 
@@ -955,7 +998,16 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
               label: loc.tr('whereabouts.time'),
               value: '${item.startTime} - ${item.endTime}',
             ),
-            _DetailRow(label: loc.tr('whereabouts.location'), value: locationName),
+            _DetailRow(
+              label: loc.tr('whereabouts.location'),
+              value: item.isOwnLocation
+                  ? '$locationName\n${loc.tr('whereabouts.ownLocation')}'
+                  : locationName,
+              trailing: MapLinkButton(
+                latitude: mapLocation?.latitude,
+                longitude: mapLocation?.longitude,
+              ),
+            ),
             _DetailRow(label: loc.tr('whereabouts.contact'), value: contactName),
             _DetailRow(
               label: loc.tr('whereabouts.recurrence'),
@@ -985,10 +1037,11 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({required this.label, required this.value, this.trailing});
 
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1004,7 +1057,15 @@ class _DetailRow extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 4),
-          Text(value),
+          if (trailing == null)
+            Text(value)
+          else
+            Row(
+              children: [
+                Expanded(child: Text(value)),
+                trailing!,
+              ],
+            ),
         ],
       ),
     );
@@ -1112,6 +1173,9 @@ class _WhereaboutsDialog extends ConsumerStatefulWidget {
 class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
   static const List<String> _recurrenceOptions = ['daily', 'weekly', 'monthly'];
 
+  /// Dropdown value that keeps the location the fighter picked on the map.
+  static const _ownLocationValue = '__fighter_own_location__';
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _dateController;
   late final TextEditingController _startTimeController;
@@ -1133,8 +1197,10 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
     _endTimeController = TextEditingController(text: item?.endTime ?? '');
     _notesController = TextEditingController(text: item?.notes ?? '');
     _fighterId = item?.fighterId ?? _firstFighterId(widget.fighters);
-    _locationId = item?.locationId ?? _firstLocationId(widget.locations);
-    _contactId = item?.contactId ?? _firstContactId(widget.contacts);
+    _locationId = item == null
+        ? _firstLocationId(widget.locations)
+        : (item.isOwnLocation ? _ownLocationValue : item.locationId);
+    _contactId = item?.contactId ?? '';
     _recurrence = item?.recurrence ?? _recurrenceOptions.first;
   }
 
@@ -1251,13 +1317,18 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                     if (item == null) {
                       return;
                     }
+                    final keepOwnLocation = _locationId == _ownLocationValue;
                     await notifier.update(
                       id: item.id,
                       fighterId: _fighterId,
                       date: _dateController.text,
                       startTime: _startTimeController.text,
                       endTime: _endTimeController.text,
-                      locationId: _locationId,
+                      locationId: keepOwnLocation ? '' : _locationId,
+                      locationName: keepOwnLocation
+                          ? item.locationName
+                          : _directoryLocationName(),
+                      keepOwnLocation: keepOwnLocation,
                       contactId: _contactId,
                       notes: _notesController.text,
                       recurrence: _recurrence,
@@ -1269,6 +1340,7 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                       startTime: _startTimeController.text,
                       endTime: _endTimeController.text,
                       locationId: _locationId,
+                      locationName: _directoryLocationName(),
                       contactId: _contactId,
                       notes: _notesController.text,
                       recurrence: _recurrence,
@@ -1325,26 +1397,56 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
     );
   }
 
+  String _directoryLocationName() {
+    return findLocationRecord(locations: widget.locations, id: _locationId)
+            ?.name ??
+        '';
+  }
+
   Widget _buildLocationDropdown(dynamic loc) {
     final options = widget.locations;
+    final ownLocation = widget.item?.isOwnLocation ?? false
+        ? widget.item
+        : null;
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       initialValue: _safeInitial(
         current: _locationId,
-        options: options.map((item) => item.id),
+        options: [
+          if (ownLocation != null) _ownLocationValue,
+          ...options.map((item) => item.id),
+        ],
       ),
       decoration: InputDecoration(
         labelText: loc.tr('whereabouts.location'),
         border: const OutlineInputBorder(),
       ),
-      items: options
-          .map(
-            (item) => DropdownMenuItem(
-              value: item.id,
-              child: Text(item.name),
+      items: [
+        if (ownLocation != null)
+          DropdownMenuItem(
+            value: _ownLocationValue,
+            child: Row(
+              children: [
+                const Icon(Icons.push_pin_outlined, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${loc.tr('whereabouts.ownLocation')}: '
+                    '${ownLocation.locationName}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-          )
-          .toList(),
-      onChanged: options.isEmpty
+          ),
+        ...options.map(
+          (item) => DropdownMenuItem(
+            value: item.id,
+            child: Text(item.name),
+          ),
+        ),
+      ],
+      onChanged: options.isEmpty && ownLocation == null
           ? null
           : (value) {
               if (value != null) {
@@ -1365,36 +1467,31 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
   Widget _buildContactDropdown(dynamic loc) {
     final options = widget.contacts;
     return DropdownButtonFormField<String>(
-      initialValue: _safeInitial(
-        current: _contactId,
-        options: options.map((item) => item.id),
-      ),
+      initialValue: options.any((item) => item.id == _contactId)
+          ? _contactId
+          : '',
       decoration: InputDecoration(
-        labelText: loc.tr('whereabouts.contact'),
+        labelText: loc.tr('whereabouts.contactOptional'),
         border: const OutlineInputBorder(),
       ),
-      items: options
-          .map(
-            (item) => DropdownMenuItem(
-              value: item.id,
-              child: Text(item.name),
-            ),
-          )
-          .toList(),
-      onChanged: options.isEmpty
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() {
-                  _contactId = value;
-                });
-              }
-            },
-      validator: (_) {
-        if (_contactId.isEmpty) {
-          return context.l10n.tr('fighters.required');
+      items: [
+        DropdownMenuItem(
+          value: '',
+          child: Text(loc.tr('whereabouts.noContact')),
+        ),
+        ...options.map(
+          (item) => DropdownMenuItem(
+            value: item.id,
+            child: Text(item.name),
+          ),
+        ),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          setState(() {
+            _contactId = value;
+          });
         }
-        return null;
       },
     );
   }
@@ -1522,6 +1619,53 @@ class _MutationBanner extends StatelessWidget {
   }
 }
 
+/// The fighter's own map pin when they picked one, otherwise the matching
+/// directory location's coordinates.
+MapCoordinates? _resolveLocation(
+  WhereaboutsEntry entry,
+  Map<String, LocationRecord> locationsById,
+) {
+  return entry.pickedCoordinates ??
+      coordinatesOf(
+        locationsById[entry.locationId] ??
+            findLocationRecord(
+              locations: locationsById.values,
+              name: entry.locationName,
+            ),
+      );
+}
+
+/// Location name, with a pin marking a location the fighter picked on the
+/// map themselves (not from the directory).
+class _LocationText extends StatelessWidget {
+  const _LocationText({required this.entry, required this.name});
+
+  final WhereaboutsEntry entry;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!entry.isOwnLocation) {
+      return Text(name);
+    }
+    return Tooltip(
+      message: context.l10n.tr('whereabouts.ownLocationTooltip'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.push_pin_outlined,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 4),
+          Flexible(child: Text(name)),
+        ],
+      ),
+    );
+  }
+}
+
 String _locationLabel(
   WhereaboutsEntry entry,
   Map<String, String> locationNamesById,
@@ -1544,9 +1688,6 @@ String _recurrenceLabelKey(String value) {
 
 String _firstFighterId(List<Fighter> items) =>
     items.isEmpty ? '' : items.first.uid;
-
-String _firstContactId(List<Contact> items) =>
-    items.isEmpty ? '' : items.first.id;
 
 String _firstLocationId(List<LocationRecord> items) =>
     items.isEmpty ? '' : items.first.id;

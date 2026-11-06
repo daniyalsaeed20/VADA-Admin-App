@@ -11,6 +11,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../checkins/presentation/checkin_alert_listener.dart';
 import '../../fighters/presentation/fighter_signup_alert_listener.dart';
+import '../../schedule_change_requests/presentation/schedule_change_requests_controller.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({required this.child, super.key});
@@ -22,6 +23,8 @@ class AdminShell extends ConsumerWidget {
     final currentPath = GoRouterState.of(context).matchedLocation;
     final locale = ref.watch(localeControllerProvider);
     final loc = context.l10n;
+    final pendingRequestsCount =
+        ref.watch(pendingScheduleChangeRequestsCountProvider);
     final navItems = [
       _NavItem(
         route: AppRoutes.dashboard,
@@ -58,6 +61,7 @@ class AdminShell extends ConsumerWidget {
         icon: Icons.swap_horiz_outlined,
         selectedIcon: Icons.swap_horiz,
         label: loc.tr('nav.scheduleRequests'),
+        badgeCount: pendingRequestsCount,
       ),
       _NavItem(
         route: AppRoutes.checkins,
@@ -137,6 +141,9 @@ class AdminShell extends ConsumerWidget {
                               : item.icon,
                         ),
                         title: Text(item.label),
+                        trailing: item.badgeCount > 0
+                            ? _PendingCountBadge(count: item.badgeCount)
+                            : null,
                         selected: selectedIndex == index,
                         onTap: () {
                           Navigator.of(context).pop();
@@ -182,9 +189,26 @@ class AdminShell extends ConsumerWidget {
             destinations: navItems
                 .map(
                   (item) => NavigationRailDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: Text(item.label),
+                    // Extended rail shows the badge after the label; the
+                    // collapsed rail overlays it on the icon instead.
+                    icon: _NavIcon(
+                      icon: item.icon,
+                      badgeCount: useExtendedRail ? 0 : item.badgeCount,
+                    ),
+                    selectedIcon: _NavIcon(
+                      icon: item.selectedIcon,
+                      badgeCount: useExtendedRail ? 0 : item.badgeCount,
+                    ),
+                    label: useExtendedRail && item.badgeCount > 0
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(item.label),
+                              const SizedBox(width: 8),
+                              _PendingCountBadge(count: item.badgeCount),
+                            ],
+                          )
+                        : Text(item.label),
                   ),
                 )
                 .toList(),
@@ -412,10 +436,75 @@ class _NavItem {
     required this.icon,
     required this.selectedIcon,
     required this.label,
+    this.badgeCount = 0,
   });
 
   final String route;
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+
+  /// Shown as a round count badge when greater than zero.
+  final int badgeCount;
+}
+
+/// Nav icon with an optional count badge overlaid on its top-right corner.
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({required this.icon, required this.badgeCount});
+
+  final IconData icon;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    if (badgeCount <= 0) {
+      return Icon(icon);
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          top: -8,
+          right: -12,
+          child: _PendingCountBadge(count: badgeCount),
+        ),
+      ],
+    );
+  }
+}
+
+/// Round count badge styled like the "Pending" status chip on the
+/// Schedule Change Requests page (orange tint, dark orange bold text).
+class _PendingCountBadge extends StatelessWidget {
+  const _PendingCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // Opaque version of the chip's translucent orange so the badge stays
+    // readable when it sits on top of an icon.
+    final background = Color.alphaBlend(
+      Colors.orange.withValues(alpha: 0.18),
+      scheme.surface,
+    );
+    return Container(
+      constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.orange.shade900,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
 }
