@@ -80,9 +80,10 @@ class WhereaboutsRepository {
     bool keepOwnLocation = false,
     required String contactId,
     required String notes,
-    required String recurrence,
+
+    /// Null leaves the stored repeat value untouched (series entries).
+    String? recurrence,
   }) async {
-    final normalizedRecurrence = normalizeRecurrence(recurrence);
     final window = _windowTimestamps(
       date: date,
       startTime: startTime,
@@ -103,10 +104,53 @@ class WhereaboutsRepository {
       },
       'contactId': contactId.trim(),
       'notes': notes.trim(),
-      'recurrence': normalizedRecurrence,
-      'frequency': normalizedRecurrence,
+      if (recurrence != null) ...{
+        'recurrence': normalizeRecurrence(recurrence),
+        'frequency': normalizeRecurrence(recurrence),
+      },
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  /// Applies the same time, location, contact and notes to several entries of
+  /// a repeating series. Each entry keeps its own date, fighter and series
+  /// fields.
+  Future<void> updateSeriesEntries({
+    required List<WhereaboutsEntry> entries,
+    required String startTime,
+    required String endTime,
+    required String locationId,
+    required String locationName,
+    bool keepOwnLocation = false,
+    required String contactId,
+    required String notes,
+  }) async {
+    const chunkSize = 400;
+    for (var i = 0; i < entries.length; i += chunkSize) {
+      final batch = _firestore.batch();
+      for (final entry in entries.skip(i).take(chunkSize)) {
+        final window = _windowTimestamps(
+          date: entry.date,
+          startTime: startTime,
+          endTime: endTime,
+        );
+        batch.set(_schedules.doc(entry.id), {
+          'startTime': startTime.trim(),
+          'endTime': endTime.trim(),
+          if (window != null) 'startAt': Timestamp.fromDate(window.start),
+          if (window != null) 'endAt': Timestamp.fromDate(window.end),
+          if (!keepOwnLocation) ...{
+            'locationId': locationId.trim(),
+            'locationName': locationName.trim(),
+            ...directoryLocationPatch(),
+          },
+          'contactId': contactId.trim(),
+          'notes': notes.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      await batch.commit();
+    }
   }
 }
 

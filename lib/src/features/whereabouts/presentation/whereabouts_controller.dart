@@ -108,7 +108,12 @@ class WhereaboutsMutationController
     bool keepOwnLocation = false,
     required String contactId,
     required String notes,
-    required String recurrence,
+
+    /// Null for series entries: their repeat value cannot be changed.
+    String? recurrence,
+
+    /// Shown in the fighter notification when [recurrence] is null.
+    String currentRecurrence = '',
   }) async {
     state =
         state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
@@ -135,13 +140,78 @@ class WhereaboutsMutationController
             locationId: locationId,
             locationName: locationName,
             contactId: contactId,
-            recurrence: recurrence,
+            recurrence: recurrence ?? currentRecurrence,
             notes: notes,
             isCreate: false,
           );
       state = state.copyWith(
         isLoading: false,
         successMessage: 'whereabouts.updateSuccess',
+      );
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'whereabouts.unknownError',
+      );
+    }
+  }
+
+  /// Updates several entries of one repeating series and sends the fighter a
+  /// single notification for the whole change.
+  Future<void> updateSeries({
+    required List<WhereaboutsEntry> entries,
+    required String startTime,
+    required String endTime,
+    required String locationId,
+    required String locationName,
+    bool keepOwnLocation = false,
+    required String contactId,
+    required String notes,
+  }) async {
+    if (entries.isEmpty) return;
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearSuccess: true,
+    );
+    try {
+      final sorted = [...entries]
+        ..sort((a, b) => a.sortKey.compareTo(b.sortKey));
+      await _ref
+          .read(whereaboutsRepositoryProvider)
+          .updateSeriesEntries(
+            entries: sorted,
+            startTime: startTime,
+            endTime: endTime,
+            locationId: locationId,
+            locationName: locationName,
+            keepOwnLocation: keepOwnLocation,
+            contactId: contactId,
+            notes: notes,
+          );
+      final first = sorted.first;
+      final last = sorted.last;
+      final dateLabel = sorted.length == 1
+          ? first.date
+          : '${first.date} to ${last.date} (${sorted.length} entries)';
+      await _ref
+          .read(scheduleUpdateNotificationQueueProvider)
+          .queueScheduleChange(
+            fighterId: first.fighterId,
+            scheduleId: first.id,
+            date: dateLabel,
+            startTime: startTime,
+            endTime: endTime,
+            locationId: locationId,
+            locationName: locationName,
+            contactId: contactId,
+            recurrence: first.recurrence,
+            notes: notes,
+            isCreate: false,
+          );
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'whereabouts.seriesUpdateSuccess',
       );
     } catch (_) {
       state = state.copyWith(

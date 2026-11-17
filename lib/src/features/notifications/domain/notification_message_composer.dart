@@ -64,7 +64,7 @@ class NotificationMessageComposer {
       '$date • $startTime-$endTime',
       'Location: $locationName',
       'Contact: $contactName',
-      'Repeat: ${normalizeRecurrence(recurrence)}',
+      'Repeat: ${recurrenceDisplay(recurrence)}',
       if (notesPreview.isNotEmpty) 'Notes: $notesPreview',
     ];
     final defaultBody = bodyLines.join('\n');
@@ -76,7 +76,7 @@ class NotificationMessageComposer {
       'endTime': endTime,
       'locationName': locationName,
       'contactName': contactName,
-      'recurrence': normalizeRecurrence(recurrence),
+      'recurrence': recurrenceDisplay(recurrence),
       'notes': notes.trim(),
     };
 

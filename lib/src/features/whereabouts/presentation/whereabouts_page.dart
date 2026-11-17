@@ -34,6 +34,18 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
   DateTime _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime _selectedDay = DateTime.now();
 
+  /// When set, "All entries" only lists this repeating series.
+  String? _seriesFilterId;
+
+  void _showSeries(String seriesId) {
+    setState(() {
+      _seriesFilterId = seriesId;
+      _searchController.clear();
+      _tabIndex = 1;
+      _page = 0;
+    });
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -146,6 +158,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
 
                 if (_tabIndex == 0) {
                   return _WhereaboutsCalendarTab(
+                    onShowSeries: _showSeries,
                     items: fighterFiltered,
                     fighterNames: fighterNames,
                     contactNames: contactNames,
@@ -170,14 +183,42 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                   );
                 }
 
+                final seriesFilterId = _seriesFilterId;
+                // Keeps the stream's order (newest first), like the full list.
+                final seriesFiltered = seriesFilterId == null
+                    ? fighterFiltered
+                    : items
+                        .where((item) => item.seriesId == seriesFilterId)
+                        .toList();
                 final filtered = _filterItems(
-                  items: fighterFiltered,
+                  items: seriesFiltered,
                   fighterNames: fighterNames,
                   contactNames: contactNames,
                   locationNames: locationNames,
                 );
+                final seriesBanner = seriesFilterId == null
+                    ? null
+                    : _SeriesFilterBanner(
+                        message: loc
+                            .tr('whereabouts.seriesFilterActive')
+                            .replaceAll('{n}', '${seriesFiltered.length}'),
+                        clearLabel: loc.tr('whereabouts.clearSeriesFilter'),
+                        onClear: () => setState(() {
+                          _seriesFilterId = null;
+                          _page = 0;
+                        }),
+                      );
                 if (filtered.isEmpty) {
-                  return Center(child: Text(loc.tr('whereabouts.noResults')));
+                  return Column(
+                    children: [
+                      ?seriesBanner,
+                      Expanded(
+                        child: Center(
+                          child: Text(loc.tr('whereabouts.noResults')),
+                        ),
+                      ),
+                    ],
+                  );
                 }
                 final totalPages =
                     math.max(1, (filtered.length / _rowsPerPage).ceil());
@@ -193,6 +234,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
 
                 return Column(
                   children: [
+                    ?seriesBanner,
                     Expanded(
                       child: isNarrow
                           ? ListView.separated(
@@ -224,6 +266,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                       locationName: locationName,
                                       mapLocation: mapLocation,
                                       contactName: contactName,
+                                      onShowSeries: _showSeries,
                                       onEdit: () => _openEditDialog(
                                         item: item,
                                         fighters: fightersAsync.asData?.value ??
@@ -290,6 +333,12 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                             height: AppLayout.smallGap(context),
                                           ),
                                           Chip(
+                                            avatar: item.isInSeries
+                                                ? const Icon(
+                                                    Icons.repeat_rounded,
+                                                    size: 16,
+                                                  )
+                                                : null,
                                             label: Text(
                                               loc.tr(
                                                 _recurrenceLabelKey(
@@ -357,6 +406,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                       locationName: locationName,
                                       mapLocation: mapLocation,
                                       contactName: contactName,
+                                      onShowSeries: _showSeries,
                                       onEdit: () => _openEditDialog(
                                         item: item,
                                         fighters: fightersAsync.asData?.value ??
@@ -382,13 +432,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
                                         ),
                                       ),
                                       DataCell(Text(contactName)),
-                                      DataCell(
-                                        Text(
-                                          loc.tr(
-                                            _recurrenceLabelKey(item.recurrence),
-                                          ),
-                                        ),
-                                      ),
+                                      DataCell(_RecurrenceText(entry: item)),
                                       DataCell(
                                         MapLinkButton(
                                           latitude: mapLocation?.latitude,
@@ -459,6 +503,38 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
     );
   }
 
+  Future<_EditScope?> _askEditScope(int followingCount) {
+    final loc = context.l10n;
+    return showDialog<_EditScope>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(loc.tr('whereabouts.editScopeTitle')),
+        content: SizedBox(
+          width: 420,
+          child: Text(loc.tr('whereabouts.editScopeBody')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(loc.tr('fighters.cancel')),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext, _EditScope.thisOnly),
+            child: Text(loc.tr('whereabouts.editThisOnly')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, _EditScope.following),
+            child: Text(
+              loc
+                  .tr('whereabouts.editFollowing')
+                  .replaceAll('{n}', '$followingCount'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<WhereaboutsEntry> _filterItems({
     required List<WhereaboutsEntry> items,
     required Map<String, String> fighterNames,
@@ -489,6 +565,27 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
     required List<Contact> contacts,
     required List<LocationRecord> locations,
   }) async {
+    List<WhereaboutsEntry>? seriesEntries;
+    if (item.isInSeries) {
+      final all =
+          ref.read(whereaboutsStreamProvider).asData?.value ??
+          const <WhereaboutsEntry>[];
+      final following =
+          all
+              .where(
+                (e) =>
+                    e.seriesId == item.seriesId &&
+                    (e.id == item.id || e.sortKey.compareTo(item.sortKey) >= 0),
+              )
+              .toList()
+            ..sort((a, b) => a.sortKey.compareTo(b.sortKey));
+      if (following.length > 1) {
+        final scope = await _askEditScope(following.length);
+        if (scope == null || !mounted) return;
+        if (scope == _EditScope.following) seriesEntries = following;
+      }
+    }
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (_) => _WhereaboutsDialog(
@@ -496,6 +593,7 @@ class _WhereaboutsPageState extends ConsumerState<WhereaboutsPage> {
         fighters: fighters,
         contacts: contacts,
         locations: locations,
+        seriesEntries: seriesEntries,
       ),
     );
     if (mounted) {
@@ -512,6 +610,7 @@ Future<void> _openDetailsDialog({
   required MapCoordinates? mapLocation,
   required String contactName,
   required VoidCallback onEdit,
+  ValueChanged<String>? onShowSeries,
 }) async {
   await showDialog<void>(
     context: context,
@@ -522,8 +621,83 @@ Future<void> _openDetailsDialog({
       mapLocation: mapLocation,
       contactName: contactName,
       onEdit: onEdit,
+      onShowSeries: onShowSeries,
     ),
   );
+}
+
+enum _EditScope { thisOnly, following }
+
+class _SeriesFilterBanner extends StatelessWidget {
+  const _SeriesFilterBanner({
+    required this.message,
+    required this.clearLabel,
+    required this.onClear,
+  });
+
+  final String message;
+  final String clearLabel;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppLayout.smallGap(context)),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: AppLayout.mediumGap(context),
+          vertical: AppLayout.smallGap(context),
+        ),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.repeat_rounded, size: 18, color: scheme.primary),
+            SizedBox(width: AppLayout.smallGap(context)),
+            Expanded(child: Text(message)),
+            TextButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.close, size: 18),
+              label: Text(clearLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Repeat label with an icon for entries that belong to a series.
+class _RecurrenceText extends StatelessWidget {
+  const _RecurrenceText({required this.entry});
+
+  final WhereaboutsEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.l10n;
+    final label = Text(loc.tr(_recurrenceLabelKey(entry.recurrence)));
+    if (!entry.isInSeries) return label;
+    return Tooltip(
+      message: loc.tr('whereabouts.seriesTooltip'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.repeat_rounded,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 4),
+          Flexible(child: label),
+        ],
+      ),
+    );
+  }
 }
 
 class _WhereaboutsHeader extends StatelessWidget {
@@ -675,8 +849,10 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
     required this.onVisibleMonthChanged,
     required this.onSelectedDayChanged,
     required this.onEditEntry,
+    required this.onShowSeries,
   });
 
+  final ValueChanged<String> onShowSeries;
   final List<WhereaboutsEntry> items;
   final Map<String, String> fighterNames;
   final Map<String, String> contactNames;
@@ -791,7 +967,22 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
               padding: EdgeInsets.only(bottom: AppLayout.smallGap(context)),
               child: Card(
                 child: ListTile(
-                  title: Text('${entry.startTime} - ${entry.endTime}'),
+                  title: Row(
+                    children: [
+                      Text('${entry.startTime} - ${entry.endTime}'),
+                      if (entry.isInSeries) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: loc.tr('whereabouts.seriesTooltip'),
+                          child: Icon(
+                            Icons.repeat_rounded,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   subtitle: Text('$fighterName\n$locationName\n$contactName'),
                   isThreeLine: true,
                   trailing: IconButton(
@@ -807,6 +998,7 @@ class _WhereaboutsCalendarTab extends StatelessWidget {
                     mapLocation: _resolveLocation(entry, locationsById),
                     contactName: contactName,
                     onEdit: () => onEditEntry(entry),
+                    onShowSeries: onShowSeries,
                   ),
                 ),
               ),
@@ -972,6 +1164,7 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
     required this.mapLocation,
     required this.contactName,
     required this.onEdit,
+    this.onShowSeries,
   });
 
   final WhereaboutsEntry item;
@@ -980,6 +1173,7 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
   final MapCoordinates? mapLocation;
   final String contactName;
   final VoidCallback onEdit;
+  final ValueChanged<String>? onShowSeries;
 
   @override
   Widget build(BuildContext context) {
@@ -1013,12 +1207,26 @@ class _WhereaboutsDetailsDialog extends StatelessWidget {
               label: loc.tr('whereabouts.recurrence'),
               value: loc.tr(_recurrenceLabelKey(item.recurrence)),
             ),
+            if (item.isInSeries)
+              _DetailRow(
+                label: loc.tr('whereabouts.series'),
+                value: seriesSummary(item),
+              ),
             if (item.notes.trim().isNotEmpty)
               _DetailRow(label: loc.tr('whereabouts.notes'), value: item.notes),
           ],
         ),
       ),
       actions: [
+        if (item.isInSeries && onShowSeries != null)
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              onShowSeries!(item.seriesId!);
+            },
+            icon: const Icon(Icons.repeat_rounded),
+            label: Text(loc.tr('whereabouts.showSeries')),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(loc.tr('fighters.cancel')),
@@ -1159,6 +1367,7 @@ class _WhereaboutsDialog extends ConsumerStatefulWidget {
     required this.fighters,
     required this.contacts,
     required this.locations,
+    this.seriesEntries,
   });
 
   final WhereaboutsEntry? item;
@@ -1166,12 +1375,21 @@ class _WhereaboutsDialog extends ConsumerStatefulWidget {
   final List<Contact> contacts;
   final List<LocationRecord> locations;
 
+  /// Set when editing "this and all following" entries of a series; the
+  /// changes are applied to every entry in the list.
+  final List<WhereaboutsEntry>? seriesEntries;
+
   @override
   ConsumerState<_WhereaboutsDialog> createState() => _WhereaboutsDialogState();
 }
 
 class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
-  static const List<String> _recurrenceOptions = ['daily', 'weekly', 'monthly'];
+  static const List<String> _recurrenceOptions = [
+    'none',
+    'daily',
+    'weekly',
+    'monthly',
+  ];
 
   /// Dropdown value that keeps the location the fighter picked on the map.
   static const _ownLocationValue = '__fighter_own_location__';
@@ -1187,6 +1405,12 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
   late String _recurrence;
 
   bool get isEdit => widget.item != null;
+
+  /// The entry belongs to a repeating series created in the mobile app.
+  bool get _isSeriesItem => widget.item?.isInSeries ?? false;
+
+  /// Editing this and all following entries of the series.
+  bool get _editsFollowing => widget.seriesEntries != null;
 
   @override
   void initState() {
@@ -1222,7 +1446,13 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
         width < 760 ? width * 0.9 : AppLayout.kpiCardWidth(context) * 3;
 
     return AlertDialog(
-      title: Text(loc.tr(isEdit ? 'whereabouts.edit' : 'whereabouts.add')),
+      title: Text(
+        loc.tr(
+          _editsFollowing
+              ? 'whereabouts.editFollowingTitle'
+              : (isEdit ? 'whereabouts.edit' : 'whereabouts.add'),
+        ),
+      ),
       content: SizedBox(
         width: dialogWidth,
         child: Form(
@@ -1238,7 +1468,14 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                 SizedBox(height: AppLayout.smallGap(context)),
                 _buildContactDropdown(loc),
                 SizedBox(height: AppLayout.smallGap(context)),
-                _buildDateField(loc),
+                if (_editsFollowing)
+                  _FollowingNote(
+                    text: loc
+                        .tr('whereabouts.followingNote')
+                        .replaceAll('{n}', '${widget.seriesEntries!.length}'),
+                  )
+                else
+                  _buildDateField(loc),
                 SizedBox(height: AppLayout.smallGap(context)),
                 Row(
                   children: [
@@ -1248,28 +1485,41 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                   ],
                 ),
                 SizedBox(height: AppLayout.smallGap(context)),
-                DropdownButtonFormField<String>(
-                  initialValue: normalizeRecurrence(_recurrence),
-                  decoration: InputDecoration(
-                    labelText: loc.tr('whereabouts.recurrence'),
-                    border: const OutlineInputBorder(),
+                if (_isSeriesItem)
+                  InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: loc.tr('whereabouts.recurrence'),
+                      helperText: loc.tr('whereabouts.recurrenceLocked'),
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.repeat_rounded),
+                      enabled: false,
+                    ),
+                    child: Text(seriesSummary(widget.item!)),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: normalizeRecurrence(_recurrence),
+                    decoration: InputDecoration(
+                      labelText: loc.tr('whereabouts.recurrence'),
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: _recurrenceOptions
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(loc.tr(_recurrenceLabelKey(value))),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _recurrence = value;
+                        });
+                      }
+                    },
                   ),
-                  items: _recurrenceOptions
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(loc.tr(_recurrenceLabelKey(value))),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _recurrence = value;
-                      });
-                    }
-                  },
-                ),
                 SizedBox(height: AppLayout.smallGap(context)),
                 TextFormField(
                   controller: _notesController,
@@ -1312,7 +1562,23 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                   final notifier = ref.read(
                     whereaboutsMutationControllerProvider.notifier,
                   );
-                  if (isEdit) {
+                  final seriesEntries = widget.seriesEntries;
+                  if (isEdit && seriesEntries != null) {
+                    final item = widget.item!;
+                    final keepOwnLocation = _locationId == _ownLocationValue;
+                    await notifier.updateSeries(
+                      entries: seriesEntries,
+                      startTime: _startTimeController.text,
+                      endTime: _endTimeController.text,
+                      locationId: keepOwnLocation ? '' : _locationId,
+                      locationName: keepOwnLocation
+                          ? item.locationName
+                          : _directoryLocationName(),
+                      keepOwnLocation: keepOwnLocation,
+                      contactId: _contactId,
+                      notes: _notesController.text,
+                    );
+                  } else if (isEdit) {
                     final item = widget.item;
                     if (item == null) {
                       return;
@@ -1331,7 +1597,9 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
                       keepOwnLocation: keepOwnLocation,
                       contactId: _contactId,
                       notes: _notesController.text,
-                      recurrence: _recurrence,
+                      // A series entry's repeat value is fixed.
+                      recurrence: _isSeriesItem ? null : _recurrence,
+                      currentRecurrence: item.recurrence,
                     );
                   } else {
                     await notifier.create(
@@ -1379,7 +1647,8 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
             ),
           )
           .toList(),
-      onChanged: options.isEmpty
+      // A series belongs to one fighter; its entries cannot be moved.
+      onChanged: options.isEmpty || _isSeriesItem
           ? null
           : (value) {
               if (value != null) {
@@ -1575,6 +1844,33 @@ class _WhereaboutsDialogState extends ConsumerState<_WhereaboutsDialog> {
   }
 }
 
+class _FollowingNote extends StatelessWidget {
+  const _FollowingNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppLayout.mediumGap(context)),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.repeat_rounded, size: 18, color: scheme.primary),
+          SizedBox(width: AppLayout.smallGap(context)),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+}
+
 class _MutationBanner extends StatelessWidget {
   const _MutationBanner({required this.message, required this.isError});
 
@@ -1677,6 +1973,8 @@ String _locationLabel(
 
 String _recurrenceLabelKey(String value) {
   switch (normalizeRecurrence(value)) {
+    case 'none':
+      return 'whereabouts.none';
     case 'weekly':
       return 'whereabouts.weekly';
     case 'monthly':
